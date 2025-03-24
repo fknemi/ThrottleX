@@ -69,9 +69,15 @@
 
 @layer base {
   :root {
-    --font-sans: "Manrope";
+    --font-sans: "Manrope", 'sans-serif';
   }
 }
+
+@theme {
+ --color-blue-primary: #3545FD;
+ --color-black-primary: #2B2B2B;
+}
+
 :root {
   --radius: 0.625rem;
   --card: oklch(1 0 0);

@@ -1,21 +1,257 @@
 "use client";
+import { cn } from "@/lib/utils";
 import Link from "next/link";
 import AuthButtons from "@/components/auth-buttons";
 import { Session } from "@/lib/auth";
 import { authClient } from "@/lib/auth-client";
+import Logo from "./Logo";
+import { pagesStore, Page } from "@/lib/stores/pagesStore";
+import { v4 as uuidv4 } from "uuid";
+import { X, Dot } from "lucide-react";
+import React, { useEffect, useState } from "react";
+import { motion, AnimatePresence } from "motion/react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import {
+    NavigationMenu,
+    NavigationMenuContent,
+    NavigationMenuItem,
+    NavigationMenuLink,
+    NavigationMenuList,
+    NavigationMenuTrigger,
+} from "@/components/ui/navigation-menu";
 
 export default function Navbar() {
-  const { data, isPending } = authClient.useSession();
-  if (isPending) return <div>Loading...</div>;
+    const { pages } = pagesStore();
+    const pathname = usePathname();
+    const [showMobileNav, setShowMobileNav] = useState(false);
 
-  const session = data as Session;
+    useEffect(() => {
+        setShowMobileNav(false);
+    }, [pathname]);
+    const { data, isPending } = authClient.useSession();
+    if (isPending) return <div>Loading...</div>;
 
-  return (
-    <nav className="flex justify-between items-center py-3 px-4 fixed top-0 left-0 right-0 z-50 bg-slate-100">
-      <Link href="/" className="text-xl font-bold">
-        better-auth
-      </Link>
-      <AuthButtons session={session} />
-    </nav>
-  );
+    const session = data as Session;
+    function toggleMobileNav() {
+        setShowMobileNav(!showMobileNav);
+    }
+    return (
+        <nav className="flex flex-row justify-between lg:justify-evenly items-center w-full border-2 py-2 px-4 -z-30">
+            <Logo />
+            <button onClick={toggleMobileNav} className="md:hidden">
+                <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="24"
+                    height="24"
+                    viewBox="0 0 9 9"
+                >
+                    <g
+                        id="Group_12096"
+                        data-name="Group 12096"
+                        transform="translate(-1221 -24)"
+                    >
+                        <circle
+                            id="Ellipse_68"
+                            data-name="Ellipse 68"
+                            cx="1.5"
+                            cy="1.5"
+                            r="1.5"
+                            transform="translate(1221 24)"
+                            fill="var(--color-black-primary)"
+                        ></circle>
+                        <circle
+                            id="Ellipse_71"
+                            data-name="Ellipse 71"
+                            cx="1.5"
+                            cy="1.5"
+                            r="1.5"
+                            transform="translate(1221 30)"
+                            fill="var(--color-black-primary)"
+                        ></circle>
+                        <circle
+                            id="Ellipse_69"
+                            data-name="Ellipse 69"
+                            cx="1.5"
+                            cy="1.5"
+                            r="1.5"
+                            transform="translate(1227 24)"
+                            fill="var(--color-black-primary)"
+                        ></circle>
+                        <circle
+                            id="Ellipse_70"
+                            data-name="Ellipse 70"
+                            cx="1.5"
+                            cy="1.5"
+                            r="1.5"
+                            transform="translate(1227 30)"
+                            fill="var(--color-black-primary)"
+                        ></circle>
+                    </g>
+                </svg>
+            </button>
+            <AnimatePresence>
+                {showMobileNav && (
+                    <MobileNav
+                        session={session}
+                        pages={pages}
+                        toggleMobileNav={toggleMobileNav}
+                    />
+                )}
+            </AnimatePresence>
+            <div className="flex-row items-center justify-center gap-4 bg-black-primary text-white rounded-full py-2 px-4 backdrop-blur-md hidden md:flex">
+                {pages.slice(0,3).map(({ title, route }) => {
+                    return (
+                        <Link
+                            key={uuidv4()}
+                            href={route}
+                            className="font-medium font-sans flex flex-row align-center items-center"
+                        >
+                            <Dot size={32} strokeWidth={1.5} />
+                            <span className="ml-[-2px]">{title}</span>
+                        </Link>
+                    );
+                })}
+                <NavigationMenu>
+                    <NavigationMenuList>
+                        <NavigationMenuItem className="">
+                            <NavigationMenuTrigger className="text-white !bg-transparent font-sans font-medium text-md">
+                                Getting started
+                            </NavigationMenuTrigger>
+                            <NavigationMenuContent>
+                                <ul className="grid gap-3 p-4 md:w-[400px] lg:w-[500px] lg:grid-cols-[.75fr_1fr]">
+                                    <li className="row-span-3">
+                                        <NavigationMenuLink asChild>
+                                            <a
+                                                className="flex h-full w-full select-none flex-col justify-end rounded-md bg-gradient-to-b from-muted/50 to-muted p-6 no-underline outline-none focus:shadow-md"
+                                                href="/"
+                                            >
+                                                <div className="mb-2 mt-4 text-lg font-medium">
+                                                    shadcn/ui
+                                                </div>
+                                                <p className="text-sm leading-tight text-muted-foreground">
+                                                    Beautifully designed
+                                                    components built with Radix
+                                                    UI and Tailwind CSS.
+                                                </p>
+                                            </a>
+                                        </NavigationMenuLink>
+                                    </li>
+                                    <ListItem href="/docs" title="Introduction">
+                                        Re-usable components built using Radix
+                                        UI and Tailwind CSS.
+                                    </ListItem>
+                                    <ListItem
+                                        href="/docs/installation"
+                                        title="Installation"
+                                    >
+                                        How to install dependencies and
+                                        structure your app.
+                                    </ListItem>
+                                    <ListItem
+                                        href="/docs/primitives/typography"
+                                        title="Typography"
+                                    >
+                                        Styles for headings, paragraphs,
+                                        lists...etc
+                                    </ListItem>
+                                </ul>
+                            </NavigationMenuContent>
+                        </NavigationMenuItem>
+                    </NavigationMenuList>
+                </NavigationMenu>
+            </div>
+            <AuthButtons session={session} className="hidden md:flex" />
+        </nav>
+    );
 }
+
+function MobileNav({
+    session,
+    pages,
+    toggleMobileNav,
+}: {
+    session: Session;
+    pages: Page[];
+    toggleMobileNav: () => void;
+}) {
+    return (
+        <motion.div
+            className={cn(
+                "absolute top-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[95vw] h-[90vh] bg-white/50 rounded-md border-2 border-black-primary/20 flex flex-col justify-between z-50 backdrop-blur-md md:hidden"
+            )}
+            initial={{ left: "-100vw", opacity: 0 }}
+            animate={{
+                left: "50%",
+                opacity: 1,
+                transition: {
+                    left: {
+                        type: "spring",
+                        damping: 30,
+                        stiffness: 100,
+                        duration: 0.5,
+                    },
+                    opacity: { duration: 0.2 },
+                },
+            }}
+            exit={{
+                opacity: 0,
+                transition: { duration: 0.3 },
+            }}
+        >
+            <span className="flex justify-end p-4" onClick={toggleMobileNav}>
+                <X size={24} />
+            </span>
+            <section className="flex flex-col gap-4 justify-center items-start pl-4 text-4xl font-sans font-bold mt-[-4rem]">
+                {pages.slice(0, 5).map(({ title, route }) => {
+                    return (
+                        <Link key={uuidv4()} href={route}>
+                            {title}
+                        </Link>
+                    );
+                })}
+            </section>
+
+            <section className="flex flex-col gap-2 justify-center items-start pl-4 text-xl font-sans font-bold pt-10">
+                {pages.slice(5, 8).map(({ title, route }) => {
+                    return (
+                        <Link key={uuidv4()} href={route}>
+                            {title}
+                        </Link>
+                    );
+                })}
+            </section>
+
+            <section className="flex justify-start items-end p-4">
+                <AuthButtons session={session} className="md:flex w-full md:w-fit" />
+            </section>
+        </motion.div>
+    );
+}
+
+const ListItem = React.forwardRef<
+    React.ComponentRef<"a">,
+    React.ComponentPropsWithoutRef<"a">
+>(({ className, title, children, ...props }, ref) => {
+    return (
+        <li>
+            <NavigationMenuLink asChild>
+                <a
+                    ref={ref}
+                    className={cn(
+                        "leading-none no-underline outline-none transition-colors",
+                        className
+                    )}
+                    {...props}
+                >
+                    <div className="text-sm font-medium leading-none">
+                        {title}
+                    </div>
+                    <p className="line-clamp-2 text-sm leading-snug text-muted-foreground">
+                        {children}
+                    </p>
+                </a>
+            </NavigationMenuLink>
+        </li>
+    );
+});
+ListItem.displayName = "ListItem";
