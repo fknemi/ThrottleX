@@ -3,20 +3,22 @@ export default function LoadingButton({
   pending,
   children,
   onClick,
+  className
 }: {
   pending: boolean;
   children: React.ReactNode;
   onClick?: () => void;
+  className: string;
 }) {
   return (
     <Button
       onClick={onClick}
-      className="w-full"
+      className={className}
       type="submit"
       disabled={pending}
     >
       {pending ? (
-        <div className="flex items-center justify-center">
+        <div className="flex items-center justify-center ">
           <svg
             className="animate-spin h-5 w-5 text-white mr-2"
             xmlns="http://www.w3.org/2000/svg"

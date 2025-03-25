@@ -45,7 +45,7 @@ export default function AuthButtons({
                     </Link>
                 </div>
             ) : (
-                <div className="flex items-center">
+                <div className="flex items-end justify-end">
                     <SignoutButton />
                 </div>
             )}
