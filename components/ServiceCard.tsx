@@ -45,7 +45,7 @@ export function ServiceCard({ service, onSelect }: ServiceCardProps) {
 
         <div className="flex items-center gap-2 text-sm">
           <span className="font-medium">Routes:</span>
-          <Badge variant="outline">{service._count?.routes || 0}</Badge>
+          <Badge variant="outline">{service.routeCount || 0}</Badge>
         </div>
 
         {service.tags?.length > 0 && (

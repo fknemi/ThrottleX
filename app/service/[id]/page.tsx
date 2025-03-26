@@ -24,8 +24,20 @@ import { Skeleton } from "@/components/ui/skeleton";
 import Link from "next/link";
 import { EditServiceDialog } from "@/components/EditServiceDialog";
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Trash } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { useToast } from "@/hooks/use-toast"
 interface Route {
   id: string;
   path: string;
@@ -36,9 +48,14 @@ interface Route {
 }
 
 export default function ServiceDetailPage() {
-const pathname = usePathname();
+  const pathname = usePathname();
+  const {toast} = useToast()
   const { id } = useParams();
   const queryClient = useQueryClient();
+  const router = useRouter();
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [routeToDelete, setRouteToDelete] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Fetch service details
   const { data: service, isLoading: isLoadingService } = useQuery({
@@ -60,14 +77,40 @@ const pathname = usePathname();
     },
   });
 
-  // Format dates consistently
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
+  const handleDeleteRoute = async () => {
+    if (!routeToDelete) return;
+
+    setIsDeleting(true);
+    try {
+      await axios.delete("/api/internal/route/delete", {
+        data: { routeId: routeToDelete },
+      });
+
+      toast({
+        title: "Route deleted",
+        description: "The route has been successfully deleted.",
+      });
+
+      // Refresh the routes list
+      queryClient.invalidateQueries(["routes", id]);
+      // Also refresh service stats to update route count
+      queryClient.invalidateQueries(["service", id]);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete the route. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeleting(false);
+      setDeleteDialogOpen(false);
+      setRouteToDelete(null);
+    }
+  };
+
+  const openDeleteDialog = (routeId: string) => {
+    setRouteToDelete(routeId);
+    setDeleteDialogOpen(true);
   };
 
   if (isLoadingService) {
@@ -95,8 +138,9 @@ const pathname = usePathname();
   }
 
   return (
-    <div className="container mx-auto py-8 space-y-6">
-      <div className="flex justify-between items-center">
+    <div className="container mx-auto py-8 space-y-6"> 
+
+<div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold">{service.name}</h1>
         <div className="flex gap-2">
           <EditServiceDialog service={service} />
@@ -107,6 +151,8 @@ const pathname = usePathname();
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+
         <Card>
           <CardHeader>
             <CardTitle>Service Information</CardTitle>
@@ -154,7 +200,7 @@ const pathname = usePathname();
         </Card>
       </div>
 
-      <Card>
+         <Card>
         <CardHeader>
           <CardTitle>Routes</CardTitle>
           <CardDescription>
@@ -198,9 +244,16 @@ const pathname = usePathname();
                     <TableCell>
                       {new Date(route.createdAt).toLocaleDateString()}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="flex gap-2">
                       <Button variant="ghost" size="sm">
                         Edit
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => openDeleteDialog(route.id)}
+                      >
+                        <Trash className="h-4 w-4 text-red-500" />
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -210,6 +263,29 @@ const pathname = usePathname();
           )}
         </CardContent>
       </Card>
-    </div>
+
+      {/* Delete confirmation dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the route
+              and remove all associated data.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteRoute}
+              disabled={isDeleting}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {isDeleting ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+         </div>
   );
 }

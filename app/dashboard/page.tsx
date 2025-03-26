@@ -1,3 +1,205 @@
-export default function Dashboard() {
-  return <div></div>;
+"use client"
+import React, { useState, useEffect } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { 
+  AlertCircle, 
+  Clock, 
+  BarChart2, 
+  ShieldCheck, 
+  Server 
+} from 'lucide-react';
+import { 
+  BarChart, 
+  Bar, 
+  XAxis, 
+  YAxis, 
+  Tooltip, 
+  ResponsiveContainer 
+} from 'recharts';
+
+// Route Analytics Component
+function RouteAnalyticsCard({ routeData }) {
+  return (
+    <div className="grid grid-cols-4 gap-4">
+      {/* Request Overview */}
+      <Card className="col-span-2 row-span-2">
+        <CardHeader>
+          <CardTitle className="flex items-center">
+            <BarChart2 className="mr-2" /> Request Overview
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ResponsiveContainer width="100%" height={250}>
+            <BarChart 
+              data={[
+                { name: 'Total', count: routeData.requestCount },
+                { name: 'Success', count: routeData.successCount },
+                { name: 'Errors', count: routeData.errorCount }
+              ]}
+            >
+              <XAxis dataKey="name" />
+              <YAxis />
+              <Tooltip />
+              <Bar dataKey="count" fill="#8884d8" />
+            </BarChart>
+          </ResponsiveContainer>
+        </CardContent>
+      </Card>
+
+      {/* Performance Metrics */}
+      <Card className="col-span-1">
+        <CardHeader>
+          <CardTitle className="flex items-center">
+            <Clock className="mr-2" /> Response Time
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-2">
+            <div className="flex justify-between">
+              <span>Average:</span>
+              <Badge variant="secondary">
+                {routeData.avgResponseTime.toFixed(2)}ms
+              </Badge>
+            </div>
+            <div className="flex justify-between">
+              <span>Max:</span>
+              <Badge variant="destructive">
+                {routeData.maxResponseTime}ms
+              </Badge>
+            </div>
+            <div className="flex justify-between">
+              <span>Min:</span>
+              <Badge variant="outline">
+                {routeData.minResponseTime}ms
+              </Badge>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Status Code Distribution */}
+      <Card className="col-span-1">
+        <CardHeader>
+          <CardTitle className="flex items-center">
+            <ShieldCheck className="mr-2" /> Status Codes
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {Object.entries(routeData.statusCodes || {}).map(([code, count]) => (
+            <div key={code} className="flex justify-between mb-1">
+              <Badge variant={code.startsWith('2') ? 'default' : 'destructive'}>
+                {code}
+              </Badge>
+              <span>{count}</span>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      {/* Top IP Addresses */}
+      <Card className="col-span-2">
+        <CardHeader>
+          <CardTitle className="flex items-center">
+            <Server className="mr-2" /> Top IP Addresses
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {Object.entries(routeData.ipAddresses || {}).map(([ip, count]) => (
+            <div key={ip} className="flex justify-between mb-1">
+              <span>{ip}</span>
+              <Badge variant="secondary">{count} requests</Badge>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      {/* Error Analytics */}
+      <Card className="col-span-2">
+        <CardHeader>
+          <CardTitle className="flex items-center">
+            <AlertCircle className="mr-2 text-red-500" /> Error Analytics
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex justify-between items-center">
+            <span>Total Errors:</span>
+            <Badge variant="destructive">
+              {routeData.errorCount}
+            </Badge>
+          </div>
+          <div className="flex justify-between items-center mt-2">
+            <span>Error Rate:</span>
+            <Badge variant="destructive">
+              {((routeData.errorCount / routeData.requestCount) * 100).toFixed(2)}%
+            </Badge>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// Main Analytics Dashboard Component
+export default function AnalyticsDashboard() {
+  const [analyticsData, setAnalyticsData] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [selectedRoute, setSelectedRoute] = useState(null);
+
+  useEffect(() => {
+    async function fetchAnalytics() {
+      try {
+        const response = await fetch('/api/internal/analytics/summary');
+        if (!response.ok) {
+          throw new Error('Failed to fetch analytics');
+        }
+        const data = await response.json();
+        setAnalyticsData(data.data);
+        
+        // Set first route as default if routes exist
+        if (data.data.length > 0) {
+          setSelectedRoute(data.data[0]);
+        }
+
+        setLoading(false);
+      } catch (err) {
+        setError(err.message);
+        setLoading(false);
+      }
+    }
+
+    fetchAnalytics();
+  }, []);
+
+  if (loading) return <div>Loading...</div>;
+  if (error) return <div>Error: {error}</div>;
+  if (analyticsData.length === 0) return <div>No analytics data available</div>;
+
+  return (
+    <div className="p-4">
+      <Tabs 
+        value={selectedRoute?.routeId} 
+        onValueChange={(routeId) => 
+          setSelectedRoute(analyticsData.find(route => route.routeId === routeId))
+        }
+        className="w-full"
+      >
+        <TabsList className="grid w-full grid-cols-4 mb-4">
+          {analyticsData.map(route => (
+            <TabsTrigger key={route.routeId} value={route.routeId}>
+              {route.routeId}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+        
+        {analyticsData.map(route => (
+          <TabsContent key={route.routeId} value={route.routeId}>
+            <RouteAnalyticsCard routeData={route} />
+          </TabsContent>
+        ))}
+      </Tabs>
+    </div>
+  );
 }

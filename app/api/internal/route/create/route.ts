@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PrismaClient, HttpMethod } from "@prisma/client";
+import { PrismaClient, HttpMethod, RateLimitType } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 
@@ -66,7 +66,7 @@ export async function POST(req: NextRequest) {
     // Check if the service exists and user has permission
     const service = await prisma.backendService.findUnique({
       where: { id: serviceId },
-      select: { ownerId: true },
+      select: { ownerId: true, rateLimit: true },
     });
 
     if (!service) {
@@ -115,42 +115,76 @@ export async function POST(req: NextRequest) {
       ? JSON.parse(JSON.stringify(middlewares))
       : undefined;
 
-    // Create the new route
-    const newRoute = await prisma.route.create({
-      data: {
-        path,
-        method: method.toUpperCase() as HttpMethod,
-        targetUrl,
-        serviceId,
-        description: description || undefined,
-        isActive,
-        rateLimit: rateLimit || undefined,
-        cacheTtl: cacheTtl || undefined,
-        tags: sanitizedTags,
-        middlewares: sanitizedMiddlewares,
-        createdBy: session.user.id,
-      },
-      include: {
-        service: {
-          select: {
-            name: true,
-            baseUrl: true,
+    // Determine the rate limit to use (route-specific or service default)
+    const finalRateLimit = rateLimit || service.rateLimit;
+
+    // Create the new route and rate limit in a transaction
+    const [newRoute, newRateLimit] = await prisma.$transaction([
+      prisma.route.create({
+        data: {
+          path,
+          method: method.toUpperCase() as HttpMethod,
+          targetUrl,
+          serviceId,
+          description: description || undefined,
+          isActive,
+          rateLimit: finalRateLimit || undefined,
+          cacheTtl: cacheTtl || undefined,
+          tags: sanitizedTags,
+          middlewares: sanitizedMiddlewares,
+          createdBy: session.user.id,
+        },
+        include: {
+          service: {
+            select: {
+              name: true,
+              baseUrl: true,
+            },
+          },
+          creator: {
+            select: {
+              name: true,
+              email: true,
+            },
           },
         },
-        creator: {
-          select: {
-            name: true,
-            email: true,
-          },
+      }),
+      ...(finalRateLimit
+        ? [
+            prisma.rateLimit.create({
+              data: {
+                key: `route:${serviceId}:${path}:${method}`,
+                type: RateLimitType.SERVICE,
+                count: 0,
+                window: 60, // 1 minute window
+                expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), // 1 year from now
+                routeId: undefined, // Will be set after route creation
+                serviceId,
+                userId: session.user.id,
+              },
+            }),
+          ]
+        : []),
+    ]);
+
+    // If we created a rate limit, update it with the route ID
+    if (finalRateLimit && newRateLimit) {
+      await prisma.rateLimit.update({
+        where: { id: newRateLimit.id },
+        data: {
+          routeId: newRoute.id,
         },
-      },
-    });
+      });
+    }
 
     // Return success response
     return NextResponse.json(
       {
         message: "Route created successfully",
-        data: newRoute,
+        data: {
+          route: newRoute,
+          rateLimit: finalRateLimit ? newRateLimit : null,
+        },
       },
       { status: 201 },
     );

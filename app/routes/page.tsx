@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { PlusCircle, Search, Filter, Loader2 } from "lucide-react";
+import { PlusCircle, Search, Filter, Loader2, Trash } from "lucide-react";
 import axios from "axios";
 
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,17 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { useToast } from "@/hooks/use-toast"
 
 interface Route {
   id: string;
@@ -49,15 +60,15 @@ interface ApiResponse {
 
 export default function RoutesPage() {
   const router = useRouter();
+  const {toast} = useToast()
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
-
-  // {
-  //         method: '',
-  //         isActive: '',
-  //     }
   const [filters, setFilters] = useState({});
   const [page, setPage] = useState(1);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [routeToDelete, setRouteToDelete] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const { data, isLoading, isError } = useQuery<ApiResponse>({
     queryKey: ["routes", { search, ...filters, page, limit: 10 }],
@@ -78,13 +89,48 @@ export default function RoutesPage() {
     router.push(`/routes/${routeId}`);
   };
 
+  const handleDeleteRoute = async () => {
+    if (!routeToDelete) return;
+
+    setIsDeleting(true);
+    try {
+      await axios.delete("/api/internal/route/delete", {
+        data: { routeId: routeToDelete },
+      });
+
+      toast({
+        title: "Route deleted",
+        description: "The route has been successfully deleted.",
+      });
+
+      // Refresh the routes list
+      queryClient.invalidateQueries(["routes"]);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete the route. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeleting(false);
+      setDeleteDialogOpen(false);
+      setRouteToDelete(null);
+    }
+  };
+
+  const openDeleteDialog = (routeId: string, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent row click from triggering
+    setRouteToDelete(routeId);
+    setDeleteDialogOpen(true);
+  };
+
   return (
     <div className="container mx-auto py-8">
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-2xl font-bold">Routes</CardTitle>
           <div className="flex items-center space-x-2">
-            <Button size="sm" onClick={() => setIsCreateDialogOpen(true)}>
+            <Button size="sm" onClick={() => router.push("/route/create")}>
               <PlusCircle className="mr-2 h-4 w-4" />
               Create Route
             </Button>
@@ -135,12 +181,13 @@ export default function RoutesPage() {
                 <TableHead>Service</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Tags</TableHead>
+                <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={6}>
+                  <TableCell colSpan={7}>
                     <div className="flex items-center space-x-4">
                       <Skeleton className="h-12 w-12 rounded-full" />
                       <div className="space-y-2">
@@ -152,13 +199,13 @@ export default function RoutesPage() {
                 </TableRow>
               ) : isError ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-red-500">
+                  <TableCell colSpan={7} className="text-center text-red-500">
                     Error loading routes
                   </TableCell>
                 </TableRow>
               ) : data?.data?.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center">
+                  <TableCell colSpan={7} className="text-center">
                     No routes found
                   </TableCell>
                 </TableRow>
@@ -191,6 +238,16 @@ export default function RoutesPage() {
                         ))}
                       </div>
                     </TableCell>
+                    <TableCell>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => openDeleteDialog(route.id, e)}
+                        className="text-red-500 hover:text-red-700"
+                      >
+                        <Trash className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
                   </TableRow>
                 ))
               )}
@@ -217,6 +274,29 @@ export default function RoutesPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Delete confirmation dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the route
+              and remove all associated data.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteRoute}
+              disabled={isDeleting}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {isDeleting ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

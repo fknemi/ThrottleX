@@ -26,7 +26,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ message: "User not found" }, { status: 404 });
     }
 
-    // Get all services created by this user
+    // Get all services created by this user with route counts
     const services = await prisma.backendService.findMany({
       where: { ownerId: user.id },
       select: {
@@ -37,11 +37,24 @@ export async function GET(req: Request) {
         status: true,
         createdAt: true,
         tags: true,
+        _count: {
+          select: {
+            routes: true,
+          },
+        },
       },
       orderBy: { createdAt: "desc" },
     });
 
-    return NextResponse.json(services, { status: 200 });
+    // Transform the data to include routeCount directly in the response
+    const transformedServices = services.map(service => ({
+      ...service,
+      routeCount: service._count.routes,
+      // Remove the _count field from the response
+      _count: undefined,
+    }));
+
+    return NextResponse.json(transformedServices, { status: 200 });
   } catch (error) {
     console.error("Error fetching services:", error);
     return NextResponse.json(
