@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
@@ -8,44 +8,26 @@ import {
   Clock, 
   BarChart2, 
   ShieldCheck, 
-  Server,
-  TrendingUp 
+  Server 
 } from 'lucide-react';
+import { 
+  BarChart, 
+  Bar, 
+  XAxis, 
+  YAxis, 
+  Tooltip, 
+  ResponsiveContainer 
+} from 'recharts';
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { format } from "date-fns";
-import {
-  BarChart,
-  Bar,
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  LabelList
-} from "@/components/ui/charts";
 
 // Route Analytics Component
 function RouteAnalyticsCard({ routeData }) {
-  // Prepare data for the bar chart
-  const requestData = [
-    { name: 'Total', value: routeData.requestCount },
-    { name: 'Success', value: routeData.successCount },
-    { name: 'Errors', value: routeData.errorCount }
-  ];
-
-  // Prepare data for the line chart (response times)
-  const responseTimeData = [
-    { name: 'Avg', value: routeData.avgResponseTime },
-    { name: 'Max', value: routeData.maxResponseTime },
-    { name: 'Min', value: routeData.minResponseTime }
-  ];
-
   return (
     <div className="grid grid-cols-4 gap-4">
+      {/* ... (rest of the RouteAnalyticsCard component remains the same) */}
       {/* Request Overview */}
       <Card className="col-span-2 row-span-2">
         <CardHeader>
@@ -53,29 +35,19 @@ function RouteAnalyticsCard({ routeData }) {
             <BarChart2 className="mr-2" /> Request Overview
           </CardTitle>
         </CardHeader>
-        <CardContent className="h-[250px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart
-              data={requestData}
-              margin={{ top: 20, right: 20, left: 0, bottom: 0 }}
-              barCategoryGap={20} // Reduced gap between bars
+        <CardContent>
+          <ResponsiveContainer width="100%" height={250}>
+            <BarChart 
+              data={[
+                { name: 'Total', count: routeData.requestCount },
+                { name: 'Success', count: routeData.successCount },
+                { name: 'Errors', count: routeData.errorCount }
+              ]}
             >
-              <CartesianGrid strokeDasharray="3 3" vertical={false} />
               <XAxis dataKey="name" />
               <YAxis />
               <Tooltip />
-              <Bar 
-                dataKey="value" 
-                fill="hsl(var(--primary))"
-                radius={[4, 4, 0, 0]}
-                barSize={40} // Fixed bar width
-              >
-                <LabelList 
-                  dataKey="value" 
-                  position="top" 
-                  className="fill-foreground text-xs"
-                />
-              </Bar>
+              <Bar dataKey="count" fill="#8884d8" />
             </BarChart>
           </ResponsiveContainer>
         </CardContent>
@@ -88,41 +60,26 @@ function RouteAnalyticsCard({ routeData }) {
             <Clock className="mr-2" /> Response Time
           </CardTitle>
         </CardHeader>
-        <CardContent className="h-[200px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart
-              data={responseTimeData}
-              margin={{ top: 20, right: 20, left: 0, bottom: 0 }}
-              barCategoryGap={20}
-            >
-              <CartesianGrid strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey="name" />
-              <YAxis unit="ms" />
-              <Tooltip />
-              <Bar 
-                dataKey="value" 
-                fill="hsl(var(--primary))"
-                radius={[4, 4, 0, 0]}
-                barSize={40}
-              >
-                <LabelList 
-                  dataKey="value" 
-                  position="top" 
-                  className="fill-foreground text-xs"
-                />
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-          <div className="mt-2 flex justify-between text-sm">
-            <Badge variant="secondary">
-              Avg: {routeData.avgResponseTime.toFixed(2)}ms
-            </Badge>
-            <Badge variant="destructive">
-              Max: {routeData.maxResponseTime}ms
-            </Badge>
-            <Badge variant="outline">
-              Min: {routeData.minResponseTime}ms
-            </Badge>
+        <CardContent>
+          <div className="space-y-2">
+            <div className="flex justify-between">
+              <span>Average:</span>
+              <Badge variant="secondary">
+                {routeData.avgResponseTime.toFixed(2)}ms
+              </Badge>
+            </div>
+            <div className="flex justify-between">
+              <span>Max:</span>
+              <Badge variant="destructive">
+                {routeData.maxResponseTime}ms
+              </Badge>
+            </div>
+            <div className="flex justify-between">
+              <span>Min:</span>
+              <Badge variant="outline">
+                {routeData.minResponseTime}ms
+              </Badge>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -169,32 +126,19 @@ function RouteAnalyticsCard({ routeData }) {
           <CardTitle className="flex items-center">
             <AlertCircle className="mr-2 text-red-500" /> Error Analytics
           </CardTitle>
-          <CardDescription className="flex items-center gap-2">
-            <TrendingUp className="h-4 w-4" />
-            Error rate: {((routeData.errorCount / routeData.requestCount) * 100).toFixed(2)}%
-          </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="flex justify-between items-center mb-4">
+          <div className="flex justify-between items-center">
             <span>Total Errors:</span>
             <Badge variant="destructive">
               {routeData.errorCount}
             </Badge>
           </div>
-          <div className="h-[100px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart 
-                data={[{name: 'Errors', value: routeData.errorCount}]}
-                margin={{ top: 20, right: 20, left: 20, bottom: 0 }}
-              >
-                <Bar 
-                  dataKey="value" 
-                  fill="hsl(var(--destructive))"
-                  radius={[4, 4, 0, 0]}
-                  barSize={40}
-                />
-              </BarChart>
-            </ResponsiveContainer>
+          <div className="flex justify-between items-center mt-2">
+            <span>Error Rate:</span>
+            <Badge variant="destructive">
+              {((routeData.errorCount / routeData.requestCount) * 100).toFixed(2)}%
+            </Badge>
           </div>
         </CardContent>
       </Card>
@@ -202,7 +146,7 @@ function RouteAnalyticsCard({ routeData }) {
   );
 }
 
-// Main Analytics Dashboard Component (unchanged)
+// Main Analytics Dashboard Component
 export default function AnalyticsDashboard() {
   const [analyticsData, setAnalyticsData] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -220,6 +164,7 @@ export default function AnalyticsDashboard() {
         const data = await response.json();
         setAnalyticsData(data.data);
         
+        // Set first route as default if routes exist
         if (data.data.length > 0) {
           setSelectedRoute(data.data[0]);
         }
@@ -272,12 +217,13 @@ export default function AnalyticsDashboard() {
           ))}
         </TabsList>
         
-        {selectedRoute && (
-          <TabsContent value={selectedRoute.routeId}>
-            <RouteAnalyticsCard routeData={selectedRoute} />
+        {analyticsData.map(route => (
+          <TabsContent key={route.routeId} value={route.routeId}>
+            <RouteAnalyticsCard routeData={route} />
           </TabsContent>
-        )}
+        ))}
       </Tabs>
     </div>
   );
 }
+
