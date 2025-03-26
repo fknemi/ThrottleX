@@ -99,14 +99,16 @@ export default function Navbar() {
                 )}
             </AnimatePresence>
             <div className="flex-row items-center justify-center gap-4 bg-black-primary text-white rounded-full py-2 px-4 backdrop-blur-md hidden md:flex">
-                {pages.slice(0,3).map(({ title, route }) => {
+                {pages.slice(0, 3).map(({ title, route }) => {
                     return (
                         <Link
                             key={uuidv4()}
                             href={route}
                             className="font-medium font-sans flex flex-row align-center items-center"
                         >
-                            <Dot size={32} strokeWidth={1.5} />
+                            {route === pathname && (
+                                <Dot size={32} strokeWidth={1.5} />
+                            )}
                             <span className="ml-[-2px]">{title}</span>
                         </Link>
                     );
@@ -222,7 +224,10 @@ function MobileNav({
             </section>
 
             <section className="flex justify-start items-end p-4">
-                <AuthButtons session={session} className="md:flex w-full md:w-fit" />
+                <AuthButtons
+                    session={session}
+                    className="md:flex w-full md:w-fit"
+                />
             </section>
         </motion.div>
     );
