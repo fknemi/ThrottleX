@@ -228,14 +228,18 @@ export async function middleware(request: NextRequest) {
             let proxyResponse;
             try {
                 console.log("TARGET URL", targetUrl.toString())
-                proxyResponse = await fetch(targetUrl.toString(), {
+                proxyResponse = await fetch(targetUrl, {
                     method,
-                    headers: proxyHeaders,
-                    body:
-                        method !== "GET" && method !== "HEAD" ? request.body : undefined,
+                    headers:  !proxyHeaders.keys() ? proxyHeaders : null,
+                   body:
+                       method !== "GET" && method !== "HEAD" ? request.body : undefined,
                     redirect: "manual",
                     signal: AbortSignal.timeout(5000), // 5-second timeout
                 });
+
+
+    const contentType = proxyResponse.headers.get('content-type');
+    console.log(contentType)
             } catch (fetchError) {
                 console.error("Proxy request failed:", fetchError);
                 return NextResponse.json(
@@ -243,7 +247,6 @@ export async function middleware(request: NextRequest) {
                     { status: 503 },
                 );
             }
-
             // Response handling
             const responseHeaders = new Headers(proxyResponse.headers);
             responseHeaders.set("X-API-Gateway", "true");
