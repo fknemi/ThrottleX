@@ -99,62 +99,64 @@ export default function Navbar() {
                 )}
             </AnimatePresence>
             <div className="flex-row items-center justify-center gap-4 bg-black-primary text-white rounded-full py-2 px-4 backdrop-blur-md hidden md:flex">
-                {pages.slice(0, 3).map(({ title, route }) => {
+                {pages.map((page) => {
+                    if(session && !page.protected){return null}
                     return (
+
                         <Link
                             key={uuidv4()}
-                            href={route}
+                            href={page.route}
                             className="font-medium font-sans flex flex-row align-center items-center"
                         >
-                            {route === pathname && (
+                            {page.route === pathname && (
                                 <Dot size={32} strokeWidth={1.5} />
                             )}
-                            <span className="ml-[-2px]">{title}</span>
+                            <span className="ml-[-2px]">{page.title}</span>
                         </Link>
                     );
                 })}
                 <NavigationMenu>
                     <NavigationMenuList>
-                        <NavigationMenuItem className="">
+                        <NavigationMenuItem>
                             <NavigationMenuTrigger className="text-white !bg-transparent font-sans font-medium text-md">
-                                Getting started
+                                Features
                             </NavigationMenuTrigger>
                             <NavigationMenuContent>
                                 <ul className="grid gap-3 p-4 md:w-[400px] lg:w-[500px] lg:grid-cols-[.75fr_1fr]">
-                                    <li className="row-span-3">
-                                        <NavigationMenuLink asChild>
-                                            <a
-                                                className="flex h-full w-full select-none flex-col justify-end rounded-md bg-gradient-to-b from-muted/50 to-muted p-6 no-underline outline-none focus:shadow-md"
-                                                href="/"
-                                            >
-                                                <div className="mb-2 mt-4 text-lg font-medium">
-                                                    shadcn/ui
-                                                </div>
-                                                <p className="text-sm leading-tight text-muted-foreground">
-                                                    Beautifully designed
-                                                    components built with Radix
-                                                    UI and Tailwind CSS.
-                                                </p>
-                                            </a>
-                                        </NavigationMenuLink>
-                                    </li>
-                                    <ListItem href="/docs" title="Introduction">
-                                        Re-usable components built using Radix
-                                        UI and Tailwind CSS.
+                                    <ListItem
+                                        href="/features/analytics"
+                                        title="Analytics"
+                                    >
+                                        Track and monitor API usage with
+                                        real-time insights.
                                     </ListItem>
                                     <ListItem
-                                        href="/docs/installation"
-                                        title="Installation"
+                                        href="/features/api-monitoring"
+                                        title="API Monitoring"
                                     >
-                                        How to install dependencies and
-                                        structure your app.
+                                        Keep track of API performance and
+                                        uptime.
                                     </ListItem>
                                     <ListItem
-                                        href="/docs/primitives/typography"
-                                        title="Typography"
+                                        href="/features/api-proxy"
+                                        title="API Proxy"
                                     >
-                                        Styles for headings, paragraphs,
-                                        lists...etc
+                                        Securely manage API requests with a
+                                        proxy layer.
+                                    </ListItem>
+                                    <ListItem
+                                        href="/features/api-rate-limiting"
+                                        title="API Rate Limiting"
+                                    >
+                                        Control the number of requests per user
+                                        or IP.
+                                    </ListItem>
+                                    <ListItem
+                                        href="/features/api-throttling"
+                                        title="API Throttling"
+                                    >
+                                        Smooth out traffic spikes with request
+                                        throttling.
                                     </ListItem>
                                 </ul>
                             </NavigationMenuContent>

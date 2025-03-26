@@ -12,51 +12,61 @@ interface PagesStoreState {
 }
 export const pagesStore = create<PagesStoreState>((set) => ({
     pages: [{
-        title: "Coffee Beans",
-        route: "/link",
+        title: "Home",
+        route: "/",
         protected: false
 
     },
     {
-        title: "Ready To Brew",
-        route: "/link",
+        title: "Documentation",
+        route: "/documentation",
         protected: false
 
     },
     {
-        title: "Subscription",
-        route: "/link",
+        title: "Customers",
+        route: "/customers",
+        protected: false
+
+    },
+    {
+        title: "Company",
+        route: "/company",
         protected: false
 
 
     },
     {
-        title: "Merchandise",
-        route: "/link",
+        title: "Pricing",
+        route: "/pricing",
         protected: false
+    },
+    {
+        title: "Dashboard",
+        route: "/dashboard",
+        protected: true
+    },
+
+    {
+        title: "Routes",
+        route: "/routes",
+        protected: true
+    },
+{
+        title: "Services",
+        route: "/services",
+        protected: true
+    },
 
 
-    },
- {
-        title: "Shop all",
-        route: "/link",
-        protected: false
-    },
-{
-        title: "Our Philosophy",
-        route: "/link",
-        protected: false
-    },
-{
-        title: "Our Stores",
-        route: "/link",
-        protected: false
-    },
-{
-        title: "A Coffee Waste Initiative",
-        route: "/link",
-        protected: false
-    }
+
+
+
+
+
+
+
+ 
 
     ],
     updateLinks: (newLinks: Page[]) => set({ pages: newLinks }),

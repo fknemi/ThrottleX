@@ -1,8 +1,3 @@
-
-export default function Features(){
-    return (
-        <div>
-            
-        </div>
-    )
+export default function Features() {
+  return <div></div>;
 }

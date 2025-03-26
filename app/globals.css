@@ -69,13 +69,13 @@
 
 @layer base {
   :root {
-    --font-sans: "Manrope", 'sans-serif';
+    --font-sans: "Manrope", "sans-serif";
   }
 }
 
 @theme {
- --color-blue-primary: #3545FD;
- --color-black-primary: #2B2B2B;
+  --color-blue-primary: #3545fd;
+  --color-black-primary: #2b2b2b;
 }
 
 :root {

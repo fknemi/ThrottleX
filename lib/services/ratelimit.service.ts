@@ -3,9 +3,16 @@ import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
-export async function checkRateLimit(key: string, limit: number): Promise<boolean> {
+export async function checkRateLimit(
+  key: string,
+  limit: number,
+): Promise<boolean> {
   const window = 60 * 1000; // 1 minute
-  const type = key.startsWith('user:') ? 'USER' : key.startsWith('api_key:') ? 'API_KEY' : 'IP';
+  const type = key.startsWith("user:")
+    ? "USER"
+    : key.startsWith("api_key:")
+      ? "API_KEY"
+      : "IP";
 
   try {
     // Check existing rate limit record using the correct unique constraint
@@ -14,8 +21,8 @@ export async function checkRateLimit(key: string, limit: number): Promise<boolea
         key,
         type,
         window,
-        expiresAt: { gt: new Date() } // Only consider active limits
-      }
+        expiresAt: { gt: new Date() }, // Only consider active limits
+      },
     });
 
     const now = new Date();
@@ -25,11 +32,11 @@ export async function checkRateLimit(key: string, limit: number): Promise<boolea
       if (existingLimit.count >= limit) {
         return true; // Rate limited
       }
-      
+
       // Increment count
       await prisma.rateLimit.update({
         where: { id: existingLimit.id },
-        data: { count: { increment: 1 } }
+        data: { count: { increment: 1 } },
       });
     } else {
       // Create new rate limit record
@@ -39,14 +46,14 @@ export async function checkRateLimit(key: string, limit: number): Promise<boolea
           type,
           count: 1,
           window,
-          expiresAt
-        }
+          expiresAt,
+        },
       });
     }
-    
+
     return false;
   } catch (error) {
-    console.error('Rate limit error:', error);
+    console.error("Rate limit error:", error);
     // Fail open - don't block requests if rate limiting fails
     return false;
   }

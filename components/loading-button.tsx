@@ -3,7 +3,7 @@ export default function LoadingButton({
   pending,
   children,
   onClick,
-  className
+  className,
 }: {
   pending: boolean;
   children: React.ReactNode;

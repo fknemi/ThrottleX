@@ -1,4 +1,4 @@
-"use client"
+"use client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -33,11 +33,14 @@ export default function CreateService() {
         },
         body: JSON.stringify({
           ...serviceData,
-          tags: serviceData.tags 
-            ? serviceData.tags.split(",").map(tag => tag.trim()).filter(tag => tag)
+          tags: serviceData.tags
+            ? serviceData.tags
+                .split(",")
+                .map((tag) => tag.trim())
+                .filter((tag) => tag)
             : [],
-          metadata: serviceData.metadata 
-            ? JSON.parse(serviceData.metadata) 
+          metadata: serviceData.metadata
+            ? JSON.parse(serviceData.metadata)
             : undefined,
         }),
       });
@@ -81,7 +84,7 @@ export default function CreateService() {
   };
 
   const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
   ) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
@@ -176,10 +179,7 @@ export default function CreateService() {
           />
         </div>
 
-        <Button 
-          type="submit" 
-          disabled={createServiceMutation.isPending}
-        >
+        <Button type="submit" disabled={createServiceMutation.isPending}>
           {createServiceMutation.isPending ? "Creating..." : "Create Service"}
         </Button>
       </form>

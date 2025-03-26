@@ -8,11 +8,11 @@ export async function findRoute(path: string, method: string) {
     where: {
       path,
       method: method as any,
-      isActive: true
+      isActive: true,
     },
     include: {
-      service: true
-    }
+      service: true,
+    },
   });
 }
 

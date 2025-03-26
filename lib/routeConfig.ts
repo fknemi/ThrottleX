@@ -11,15 +11,15 @@ export async function getRouteConfiguration(pathname: string, method: string) {
       where: {
         path: pathname,
         method: method.toUpperCase() as any,
-        isActive: true
-      }
+        isActive: true,
+      },
     });
 
-    console.log('[DEBUG] Found Route:', JSON.stringify(route, null, 2));
+    console.log("[DEBUG] Found Route:", JSON.stringify(route, null, 2));
 
     return route;
   } catch (error) {
-    console.error('[DEBUG] Database Error:', error);
+    console.error("[DEBUG] Database Error:", error);
     throw error;
   }
 }

@@ -14,10 +14,7 @@ export async function POST(req: Request) {
     });
 
     if (!session?.user?.email) {
-      return NextResponse.json(
-        { message: "Unauthorized" },
-        { status: 401 }
-      );
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 
     // Parse the request body
@@ -38,7 +35,7 @@ export async function POST(req: Request) {
     if (!name || !baseUrl) {
       return NextResponse.json(
         { message: "Name and Base URL are required" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -48,10 +45,7 @@ export async function POST(req: Request) {
     });
 
     if (!user) {
-      return NextResponse.json(
-        { message: "User not found" },
-        { status: 404 }
-      );
+      return NextResponse.json({ message: "User not found" }, { status: 404 });
     }
 
     // Create the backend service
@@ -80,7 +74,7 @@ export async function POST(req: Request) {
     ) {
       return NextResponse.json(
         { message: "A service with this name already exists" },
-        { status: 409 }
+        { status: 409 },
       );
     }
 
@@ -89,7 +83,7 @@ export async function POST(req: Request) {
         message: "Error creating backend service",
         error: error instanceof Error ? error.message : "Unknown error",
       },
-      { status: 500 }
+      { status: 500 },
     );
   } finally {
     await prisma.$disconnect();

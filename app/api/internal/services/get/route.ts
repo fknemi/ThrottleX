@@ -1,4 +1,3 @@
-// pages/api/internal/services/get.ts
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 import { auth } from "@/lib/auth";
@@ -14,10 +13,7 @@ export async function GET(req: Request) {
     });
 
     if (!session?.user?.email) {
-      return NextResponse.json(
-        { message: "Unauthorized" },
-        { status: 401 }
-      );
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 
     // Find the user in the database
@@ -27,10 +23,7 @@ export async function GET(req: Request) {
     });
 
     if (!user) {
-      return NextResponse.json(
-        { message: "User not found" },
-        { status: 404 }
-      );
+      return NextResponse.json({ message: "User not found" }, { status: 404 });
     }
 
     // Get all services created by this user
@@ -45,7 +38,7 @@ export async function GET(req: Request) {
         createdAt: true,
         tags: true,
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
     });
 
     return NextResponse.json(services, { status: 200 });
@@ -56,7 +49,7 @@ export async function GET(req: Request) {
         message: "Error fetching services",
         error: error instanceof Error ? error.message : "Unknown error",
       },
-      { status: 500 }
+      { status: 500 },
     );
   } finally {
     await prisma.$disconnect();

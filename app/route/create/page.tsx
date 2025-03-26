@@ -1,4 +1,4 @@
-"use client"
+"use client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,7 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {v4 as uuid} from "uuid"
+import { v4 as uuid } from "uuid";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { Session } from "@/lib/auth";
@@ -23,17 +23,17 @@ export default function CreateRoute() {
   const { toast } = useToast();
 
   const { data: services, isPending: isServicesPending } = useQuery({
-    queryKey: ['services'],
+    queryKey: ["services"],
     queryFn: async () => {
-      const response = await fetch('/api/internal/services/get', {
+      const response = await fetch("/api/internal/services/get", {
         headers: {
           Authorization: `Bearer ${data?.session.token}`,
         },
       });
-      if (!response.ok) throw new Error('Failed to fetch services');
+      if (!response.ok) throw new Error("Failed to fetch services");
       return response.json();
     },
-    enabled: !!data?.session?.token
+    enabled: !!data?.session?.token,
   });
 
   const [formData, setFormData] = useState({
@@ -52,7 +52,7 @@ export default function CreateRoute() {
   useEffect(() => {
     // Set default serviceId if services exist and no serviceId is selected
     if (services?.length && !formData.serviceId) {
-      setFormData(prev => ({ ...prev, serviceId: services[0].id }));
+      setFormData((prev) => ({ ...prev, serviceId: services[0].id }));
     }
   }, [services]);
 
@@ -66,11 +66,14 @@ export default function CreateRoute() {
         },
         body: JSON.stringify({
           ...routeData,
-          tags: routeData.tags 
-            ? routeData.tags.split(",").map(tag => tag.trim()).filter(tag => tag)
+          tags: routeData.tags
+            ? routeData.tags
+                .split(",")
+                .map((tag) => tag.trim())
+                .filter((tag) => tag)
             : [],
-          middlewares: routeData.middlewares 
-            ? JSON.parse(routeData.middlewares) 
+          middlewares: routeData.middlewares
+            ? JSON.parse(routeData.middlewares)
             : undefined,
         }),
       });
@@ -116,7 +119,7 @@ export default function CreateRoute() {
   };
 
   const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
   ) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
@@ -127,11 +130,11 @@ export default function CreateRoute() {
   };
 
   if (isSessionPending || isServicesPending) return <div>Loading...</div>;
-  if (!services?.length) return <div>No services available. Please create a service first.</div>;
+  if (!services?.length)
+    return <div>No services available. Please create a service first.</div>;
 
   const session = data as Session;
 
- 
   return (
     <div className="max-w-2xl mx-auto p-6">
       <h1 className="text-2xl font-bold mb-6">Create New Route</h1>
@@ -191,7 +194,7 @@ export default function CreateRoute() {
               <SelectValue placeholder="Select service" />
             </SelectTrigger>
             <SelectContent>
-             {services?.map((service: { id: string, name: string }) => (
+              {services?.map((service: { id: string; name: string }) => (
                 <SelectItem key={service.id} value={service.id}>
                   {service.name}
                 </SelectItem>
@@ -274,7 +277,11 @@ export default function CreateRoute() {
           <Label htmlFor="isActive">Active</Label>
         </div>
 
-        <Button type="submit" onClick={handleSubmit} disabled={createRouteMutation.isPending}>
+        <Button
+          type="submit"
+          onClick={handleSubmit}
+          disabled={createRouteMutation.isPending}
+        >
           {createRouteMutation.isPending ? "Creating..." : "Create Route"}
         </Button>
       </form>

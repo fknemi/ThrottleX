@@ -1,8 +1,3 @@
-
-export default function Analytics(){
-    return (
-        <div>
-            
-        </div>
-    )
+export default function Analytics() {
+  return <div></div>;
 }
