@@ -10,7 +10,7 @@ export async function getRouteConfiguration(pathname: string, method: string) {
     const route = await prisma.route.findFirst({
       where: {
         path: pathname,
-        method: method.toUpperCase(),
+        method: method.toUpperCase() as any,
         isActive: true
       }
     });
