@@ -7,6 +7,13 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum Role {
+  USER
+  ADMIN
+  SUPER_ADMIN
+}
+
+
 // Unified User model combining authentication and API gateway features
 model User {
   // Authentication fields
@@ -17,7 +24,7 @@ model User {
   image           String?
   passwordHash    String?
   premium         Boolean        @default(false)
-  role            Role           @default(USER)
+  role          String    @default("user")
   banned          Boolean        @default(false)
   banReason       String?
   banExpires      Int?           // Unix timestamp for ban expiration
@@ -86,12 +93,6 @@ model Verification {
   updatedAt  DateTime @updatedAt
 
   @@map("verification")
-}
-
-enum Role {
-  USER
-  ADMIN
-  SUPER_ADMIN
 }
 
 // API Key management

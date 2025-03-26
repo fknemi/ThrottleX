@@ -1,14 +1,111 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getSessionCookie } from "better-auth/cookies";
-import { PrismaClient } from "@prisma/client";
 
-const prisma = new PrismaClient();
-
-// Cache for route configurations (with TTL)
-const routeCache = new Map<string, { route: any; expires: number }>();
+// In-memory route cache with TTL
+const routeCache = new Map<string, { route: RouteConfig; expires: number }>();
 const CACHE_TTL = 10000; // 10 seconds
 
+// Type definitions for route configuration
+interface ServiceMetadata {
+  authHeader?: string;
+  apiKey?: string;
+}
+
+interface RouteConfig {
+  path: string;
+  method: string;
+  isActive: boolean;
+  targetUrl: string;
+  rateLimit?: number;
+  middlewares?: {
+    auth?: boolean;
+    cors?: { origin?: string };
+    response?: {
+      cacheControl?: string;
+    };
+  };
+  service: {
+    metadata?: ServiceMetadata;
+    rateLimit?: number;
+  };
+}
+
+// Predefined route configurations (replace with your actual routes)
+const routeConfigurations: RouteConfig[] = [
+  {
+    path: "/api/users",
+    method: "GET",
+    isActive: true,
+    targetUrl: "https://user-service.example.com",
+    rateLimit: 100,
+    middlewares: {
+      auth: true,
+      cors: { origin: "*" }
+    },
+    service: {
+      metadata: {
+        authHeader: "Authorization",
+        apiKey: "service-secret-key"
+      },
+      rateLimit: 1000
+    }
+  },
+  // Add more route configurations here
+];
+
+// Rate limiting tracker (in-memory, replace with distributed solution in production)
+const rateLimitTracker = new Map<string, { count: number; resetTime: number }>();
+
+// Rate limiting helper
+function checkRateLimit(key: string, limit: number): boolean {
+  const now = Date.now();
+  const tracker = rateLimitTracker.get(key);
+
+  // Reset if past the tracking window (1 minute)
+  if (!tracker || tracker.resetTime < now) {
+    rateLimitTracker.set(key, { count: 1, resetTime: now + 60000 });
+    return false;
+  }
+
+  // Check if limit exceeded
+  if (tracker.count >= limit) {
+    return true;
+  }
+
+  // Increment count
+  rateLimitTracker.set(key, { 
+    count: tracker.count + 1, 
+    resetTime: tracker.resetTime 
+  });
+
+  return false;
+}
+
+// Middleware for applying route-specific logic
+async function applyMiddlewares(
+  middlewares: RouteConfig['middlewares'], 
+  context: { 
+    request: NextRequest; 
+    headers: Headers; 
+    session: ReturnType<typeof getSessionCookie> 
+  }
+) {
+  // Authentication middleware
+  if (middlewares?.auth && !context.session) {
+    throw new Error('Authentication required');
+  }
+
+  // CORS middleware
+  if (middlewares?.cors) {
+    context.headers.set(
+      'Access-Control-Allow-Origin', 
+      middlewares.cors.origin || '*'
+    );
+  }
+}
+
+// Main middleware function
 export async function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
   const method = request.method;
@@ -27,31 +124,28 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // Check if this is an API route we should proxy
-  if (pathname.startsWith("/api/") && !pathname.startsWith("/api/internal")) {
+  // Only process API routes
+  if (pathname.startsWith("/api/") && !pathname.startsWith("/api/internal") && !pathname.startsWith("/api/auth")) {
     try {
-      // Check cache first
+      // Find route configuration
       const cacheKey = `${method}:${pathname}`;
       const cachedRoute = routeCache.get(cacheKey);
       
-      let routeConfig;
+      let routeConfig: RouteConfig | undefined;
+      
+      // Use cached route if not expired
       if (cachedRoute && cachedRoute.expires > Date.now()) {
         routeConfig = cachedRoute.route;
       } else {
-        // Get route from database
-        routeConfig = await prisma.route.findFirst({
-          where: {
-            path: pathname,
-            method: method as any,
-            isActive: true
-          },
-          include: {
-            service: true
-          }
-        });
+        // Find route in predefined configurations
+        routeConfig = routeConfigurations.find(
+          route => route.path === pathname && 
+                   route.method === method && 
+                   route.isActive
+        );
 
+        // Cache the route if found
         if (routeConfig) {
-          // Cache the route
           routeCache.set(cacheKey, {
             route: routeConfig,
             expires: Date.now() + CACHE_TTL
@@ -59,6 +153,7 @@ export async function middleware(request: NextRequest) {
         }
       }
 
+      // Return 404 if no route found
       if (!routeConfig) {
         return NextResponse.json(
           { message: "Route not found" },
@@ -66,25 +161,21 @@ export async function middleware(request: NextRequest) {
         );
       }
 
-      // Check rate limiting
+      // Rate limiting
       const rateLimitKey = sessionCookie?.userId 
         ? `user:${sessionCookie.userId}` 
-        : `ip:${request.ip}`;
+        : `ip:${request.ip ?? 'unknown'}`;
       
-  // In your middleware.ts
-const isRateLimited = await checkRateLimit(
-  sessionCookie?.userId 
-    ? `user:${sessionCookie.userId}`
-    : `ip:${request.ip ?? 'unknown'}`,
-  routeConfig.rateLimit || routeConfig.service.rateLimit || 1000
-);
+      const rateLimit = routeConfig.rateLimit || routeConfig.service.rateLimit || 1000;
+      
+      if (checkRateLimit(rateLimitKey, rateLimit)) {
+        return NextResponse.json(
+          { message: "Rate limit exceeded" },
+          { status: 429, headers: { 'Retry-After': '60' } }
+        );
+      }
 
-if (isRateLimited) {
-  return NextResponse.json(
-    { message: "Rate limit exceeded" },
-    { status: 429, headers: { 'Retry-After': '60' } }
-  );
-}     // Prepare proxy request
+      // Prepare proxy request
       const targetUrl = new URL(
         pathname.replace('/api', '') + search,
         routeConfig.targetUrl
@@ -117,26 +208,27 @@ if (isRateLimited) {
         redirect: 'manual'
       });
 
-      // Handle response
+      // Handle redirects
       if (response.status >= 300 && response.status < 400) {
-        // Handle redirects
         const location = response.headers.get('location');
         if (location) {
           return NextResponse.redirect(location);
         }
       }
 
+      // Prepare response headers
       const responseHeaders = new Headers(response.headers);
       responseHeaders.set('x-api-gateway', 'true');
 
       // Apply response middlewares
       if (routeConfig.middlewares?.response) {
-        await applyResponseMiddlewares(routeConfig.middlewares.response, {
-          response,
-          headers: responseHeaders
-        });
+        const cacheControl = routeConfig.middlewares.response.cacheControl;
+        if (cacheControl) {
+          responseHeaders.set('Cache-Control', cacheControl);
+        }
       }
 
+      // Return proxied response
       return new NextResponse(response.body, {
         status: response.status,
         statusText: response.statusText,
@@ -156,43 +248,7 @@ if (isRateLimited) {
   return NextResponse.next();
 }
 
-// Rate limiting helper
-async function checkRateLimit(key: string, limit: number): Promise<boolean> {
-  // Implement your rate limiting logic here
-  // This could use Redis, Prisma, or other storage
-  // For simplicity, we'll use a basic in-memory approach
-  
-  // In production, you should use a distributed rate limiter
-  return false; // Temporary implementation
-}
-
-// Middleware application
-async function applyMiddlewares(
-  middlewares: any, 
-  context: { request: NextRequest; headers: Headers; session: any }
-) {
-  if (middlewares.auth && !context.session) {
-    throw new Error('Authentication required');
-  }
-
-  if (middlewares.cors) {
-    context.headers.set('Access-Control-Allow-Origin', middlewares.cors.origin || '*');
-  }
-
-  // Add more middleware handlers as needed
-}
-
-async function applyResponseMiddlewares(
-  middlewares: any,
-  context: { response: Response; headers: Headers }
-) {
-  if (middlewares.cacheControl) {
-    context.headers.set('Cache-Control', middlewares.cacheControl);
-  }
-
-  // Add more response middleware handlers as needed
-}
-
+// Middleware configuration
 export const config = {
   matcher: [
     "/api/:path*",

@@ -9,33 +9,53 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {v4 as uuid} from "uuid"
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { Session } from "@/lib/auth";
 import { authClient } from "@/lib/auth-client";
 import { HttpMethod } from "@prisma/client";
-import { useMutation } from "@tanstack/react-query";
-import { useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 
 export default function CreateRoute() {
-  const { data, isPending } = authClient.useSession();
+  const { data, isPending: isSessionPending } = authClient.useSession();
   const { toast } = useToast();
+
+  // Fetch available services for serviceId dropdown
+  // const { data: services, isPending: isServicesPending } = useQuery({
+  //   queryKey: ['services'],
+  //   queryFn: async () => {
+  //     const response = await fetch('/api/services', {
+  //       headers: {
+  //         Authorization: `Bearer ${data?.session.token}`,
+  //       },
+  //     });
+  //     if (!response.ok) throw new Error('Failed to fetch services');
+  //     return response.json();
+  //   },
+  //   enabled: !!data?.session?.token
+  // });
+  //
   const [formData, setFormData] = useState({
     path: "",
     method: "GET" as HttpMethod,
     targetUrl: "",
-    serviceId: "",
+    serviceId: uuid(),
     description: "",
     isActive: true,
     rateLimit: 100,
     cacheTtl: 60,
     tags: "",
-    middlewares: "{}",
+    middlewares: "{}" as string,
   });
 
+  useEffect(() => {
+      console.log(formData)
+  },[formData])
   const createRouteMutation = useMutation({
     mutationFn: async (routeData: typeof formData) => {
-      const response = await fetch("/api/routes/add", {
+      const response = await fetch("/api/internal/route/create", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -43,8 +63,12 @@ export default function CreateRoute() {
         },
         body: JSON.stringify({
           ...routeData,
-          tags: routeData.tags.split(",").map(tag => tag.trim()),
-          middlewares: JSON.parse(routeData.middlewares),
+          tags: routeData.tags 
+            ? routeData.tags.split(",").map(tag => tag.trim()).filter(tag => tag)
+            : [],
+          middlewares: routeData.middlewares 
+            ? JSON.parse(routeData.middlewares) 
+            : undefined,
         }),
       });
 
@@ -66,7 +90,7 @@ export default function CreateRoute() {
         path: "",
         method: "GET",
         targetUrl: "",
-        serviceId: "",
+        serviceId: uuid(),
         description: "",
         isActive: true,
         rateLimit: 100,
@@ -100,9 +124,12 @@ export default function CreateRoute() {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  if (isPending) return <div>Loading...</div>;
+  // if (isSessionPending || isServicesPending) return <div>Loading...</div>;
+   if (isSessionPending) return <div>Loading...</div>;
 
   const session = data as Session;
+
+
 
   return (
     <div className="max-w-2xl mx-auto p-6">
@@ -154,15 +181,22 @@ export default function CreateRoute() {
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="serviceId">Service ID</Label>
-          <Input
-            id="serviceId"
-            name="serviceId"
+          <Label htmlFor="serviceId">Service</Label>
+          <Select
             value={formData.serviceId}
-            onChange={handleChange}
-            placeholder="clxyz..."
-            required
-          />
+            onValueChange={(value) => handleSelectChange("serviceId", value)}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select service" />
+            </SelectTrigger>
+            <SelectContent>
+              {/* {services?.map((service: { id: string, name: string }) => ( */}
+              {/*   <SelectItem key={service.id} value={service.id}> */}
+              {/*     {service.name} */}
+              {/*   </SelectItem> */}
+              {/* ))} */}
+            </SelectContent>
+          </Select>
         </div>
 
         <div className="space-y-2">
@@ -239,7 +273,7 @@ export default function CreateRoute() {
           <Label htmlFor="isActive">Active</Label>
         </div>
 
-        <Button type="submit" disabled={createRouteMutation.isPending}>
+        <Button type="submit" onClick={handleSubmit} disabled={createRouteMutation.isPending}>
           {createRouteMutation.isPending ? "Creating..." : "Create Route"}
         </Button>
       </form>
