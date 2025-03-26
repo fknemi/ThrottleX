@@ -1,5 +1,248 @@
-export default async function CreateRoute() {
-  return <div></div>;
+"use client"
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { useToast } from "@/hooks/use-toast";
+import { Session } from "@/lib/auth";
+import { authClient } from "@/lib/auth-client";
+import { HttpMethod } from "@prisma/client";
+import { useMutation } from "@tanstack/react-query";
+import { useState } from "react";
+
+export default function CreateRoute() {
+  const { data, isPending } = authClient.useSession();
+  const { toast } = useToast();
+  const [formData, setFormData] = useState({
+    path: "",
+    method: "GET" as HttpMethod,
+    targetUrl: "",
+    serviceId: "",
+    description: "",
+    isActive: true,
+    rateLimit: 100,
+    cacheTtl: 60,
+    tags: "",
+    middlewares: "{}",
+  });
+
+  const createRouteMutation = useMutation({
+    mutationFn: async (routeData: typeof formData) => {
+      const response = await fetch("/api/routes/add", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${data?.session.token}`,
+        },
+        body: JSON.stringify({
+          ...routeData,
+          tags: routeData.tags.split(",").map(tag => tag.trim()),
+          middlewares: JSON.parse(routeData.middlewares),
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Failed to create route");
+      }
+
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Success",
+        description: "Route created successfully",
+        variant: "default",
+      });
+      // Reset form after successful creation
+      setFormData({
+        path: "",
+        method: "GET",
+        targetUrl: "",
+        serviceId: "",
+        description: "",
+        isActive: true,
+        rateLimit: 100,
+        cacheTtl: 60,
+        tags: "",
+        middlewares: "{}",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    createRouteMutation.mutate(formData);
+  };
+
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+  ) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleSelectChange = (name: string, value: string) => {
+    setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  if (isPending) return <div>Loading...</div>;
+
+  const session = data as Session;
+
+  return (
+    <div className="max-w-2xl mx-auto p-6">
+      <h1 className="text-2xl font-bold mb-6">Create New Route</h1>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="path">Path</Label>
+            <Input
+              id="path"
+              name="path"
+              value={formData.path}
+              onChange={handleChange}
+              placeholder="/api/users"
+              required
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="method">HTTP Method</Label>
+            <Select
+              value={formData.method}
+              onValueChange={(value) => handleSelectChange("method", value)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select method" />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.values(HttpMethod).map((method) => (
+                  <SelectItem key={method} value={method}>
+                    {method}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="targetUrl">Target URL</Label>
+          <Input
+            id="targetUrl"
+            name="targetUrl"
+            value={formData.targetUrl}
+            onChange={handleChange}
+            placeholder="http://user-service/api/users"
+            required
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="serviceId">Service ID</Label>
+          <Input
+            id="serviceId"
+            name="serviceId"
+            value={formData.serviceId}
+            onChange={handleChange}
+            placeholder="clxyz..."
+            required
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="description">Description</Label>
+          <Textarea
+            id="description"
+            name="description"
+            value={formData.description}
+            onChange={handleChange}
+            placeholder="Get all users"
+          />
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="rateLimit">Rate Limit (reqs/min)</Label>
+            <Input
+              id="rateLimit"
+              name="rateLimit"
+              type="number"
+              value={formData.rateLimit}
+              onChange={handleChange}
+              min="1"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="cacheTtl">Cache TTL (seconds)</Label>
+            <Input
+              id="cacheTtl"
+              name="cacheTtl"
+              type="number"
+              value={formData.cacheTtl}
+              onChange={handleChange}
+              min="0"
+            />
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="tags">Tags (comma separated)</Label>
+          <Input
+            id="tags"
+            name="tags"
+            value={formData.tags}
+            onChange={handleChange}
+            placeholder="users,public,admin"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="middlewares">Middlewares (JSON)</Label>
+          <Textarea
+            id="middlewares"
+            name="middlewares"
+            value={formData.middlewares}
+            onChange={handleChange}
+            placeholder='{"auth": true, "logging": false}'
+            rows={4}
+          />
+        </div>
+
+        <div className="flex items-center space-x-2">
+          <input
+            id="isActive"
+            name="isActive"
+            type="checkbox"
+            checked={formData.isActive}
+            onChange={(e) =>
+              setFormData((prev) => ({ ...prev, isActive: e.target.checked }))
+            }
+            className="h-4 w-4"
+          />
+          <Label htmlFor="isActive">Active</Label>
+        </div>
+
+        <Button type="submit" disabled={createRouteMutation.isPending}>
+          {createRouteMutation.isPending ? "Creating..." : "Create Route"}
+        </Button>
+      </form>
+    </div>
+  );
 }
-
-

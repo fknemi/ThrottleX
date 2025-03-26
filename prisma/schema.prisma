@@ -7,29 +7,44 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// Unified User model combining authentication and API gateway features
 model User {
-  id            String    @id @default(cuid()) @map("_id")
-  name          String
-  email         String    @unique
-  emailVerified Boolean   @default(false)
-  image         String?
-  premium       Boolean   @default(false)
-  role          String    @default("user")
-  banned        Boolean   @default(false)
-  banReason     String?
-  banExpires    Int? /// Unix timestamp for ban expiration
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  sessions      Session[]
-  accounts      Account[]
+  // Authentication fields
+  id              String         @id @default(cuid()) @map("_id")
+  name            String
+  email           String         @unique
+  emailVerified   Boolean        @default(false)
+  image           String?
+  passwordHash    String?
+  premium         Boolean        @default(false)
+  role            Role           @default(USER)
+  banned          Boolean        @default(false)
+  banReason       String?
+  banExpires      Int?           // Unix timestamp for ban expiration
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  lastLogin       DateTime?
+  
+  // Authentication relations
+  sessions        Session[]
+  accounts        Account[]
+  
+  // API Gateway relations
+  apiKeys         ApiKey[]
+  createdServices BackendService[] @relation("ServiceOwner")
+  createdRoutes   Route[]         @relation("RouteCreator")
+  createdBlacklists Blacklist[]   @relation("BlacklistCreator")
+  requestLogs     RequestLog[]    @relation("UserRequests")
+  rateLimits      RateLimit[]     @relation("UserRateLimits")
 
-  @@map("user")
+  @@map("users")
 }
 
 model Session {
   id             String   @id @default(cuid()) @map("_id")
   userId         String
   token          String
+  rateLimits     RateLimit[] @relation("SessionRateLimits")
   expiresAt      DateTime
   ipAddress      String?
   userAgent      String?
@@ -55,9 +70,9 @@ model Account {
   password              String?
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
+  idToken               String?
 
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  idToken String?
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("account")
 }
@@ -71,4 +86,224 @@ model Verification {
   updatedAt  DateTime @updatedAt
 
   @@map("verification")
+}
+
+enum Role {
+  USER
+  ADMIN
+  SUPER_ADMIN
+}
+
+// API Key management
+model ApiKey {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  name        String
+  description String?
+  prefix      String
+  scopes      String[] // Array of permissions
+  rateLimit   Int      @default(1000) // Requests per minute
+  expiresAt   DateTime?
+  createdAt   DateTime @default(now())
+  isActive    Boolean  @default(true)
+  serviceId   String?
+  service     BackendService? @relation(fields: [serviceId], references: [id])
+  requestLogs RequestLog[] @relation("ApiKeyRequests")
+
+  @@map("api_keys")
+}
+
+// Backend Service model for better organization
+model BackendService {
+  id          String     @id @default(uuid())
+  name        String     @unique
+  description String?
+  ownerId     String
+  owner       User       @relation("ServiceOwner", fields: [ownerId], references: [id])
+  baseUrl     String
+  healthCheckUrl String?
+  status      ServiceStatus @default(HEALTHY)
+  routes      Route[]
+  apiKeys     ApiKey[]
+  requestLogs RequestLog[] @relation("ServiceRequests")
+  analytics   AnalyticsSummary[] @relation("ServiceAnalytics")
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  tags        String[]
+  rateLimit   Int?       // Default rate limit for all routes in this service
+  metadata    Json?      // Additional service configuration
+  rateLimits  RateLimit[] @relation("ServiceRateLimits")
+
+  @@map("backend_services")
+}
+
+enum ServiceStatus {
+  HEALTHY
+  DEGRADED
+  UNHEALTHY
+  MAINTENANCE
+}
+
+// Route management - now linked to BackendService
+model Route {
+  id          String        @id @default(uuid())
+  path        String        // Unique within service
+  method      HttpMethod
+  targetUrl   String
+  serviceId   String
+  service     BackendService @relation(fields: [serviceId], references: [id])
+  description String?
+  isActive    Boolean       @default(true)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  createdBy   String
+  creator     User          @relation("RouteCreator", fields: [createdBy], references: [id])
+  middlewares Json?         // JSON config for route-specific middleware
+  tags        String[]
+  rateLimit   Int?          // Override service rate limit if needed
+  cacheTtl    Int?          // Cache TTL in seconds
+  requestLogs RequestLog[]  @relation("RouteRequests")
+  analytics   AnalyticsSummary[] @relation("RouteAnalytics")
+  rateLimits  RateLimit[]   @relation("RouteRateLimits")
+
+  @@unique([serviceId, path, method])
+  @@map("routes")
+}
+
+enum HttpMethod {
+  GET
+  POST
+  PUT
+  PATCH
+  DELETE
+  HEAD
+  OPTIONS
+}
+
+// Request logging
+model RequestLog {
+  id              String    @id @default(uuid())
+  routeId         String
+  route           Route     @relation("RouteRequests", fields: [routeId], references: [id])
+  serviceId       String
+  service         BackendService @relation("ServiceRequests", fields: [serviceId], references: [id])
+  apiKeyId        String?
+  apiKey          ApiKey?   @relation("ApiKeyRequests", fields: [apiKeyId], references: [id])
+  userId          String?
+  user            User?     @relation("UserRequests", fields: [userId], references: [id])
+  ipAddress       String?
+  userAgent       String?
+  method          String
+  path            String
+  statusCode      Int
+  requestHeaders  Json
+  responseHeaders Json
+  requestBody     String?
+  responseBody    String?
+  responseTime    Float     // in milliseconds
+  timestamp       DateTime  @default(now())
+  isError         Boolean   @default(false)
+  errorMessage    String?
+
+  @@index([routeId])
+  @@index([serviceId])
+  @@index([apiKeyId])
+  @@index([userId])
+  @@index([timestamp])
+  @@index([statusCode])
+  @@index([isError])
+  @@map("request_logs")
+}
+
+model RateLimit {
+  id        String        @id @default(uuid())
+  key       String
+  type      RateLimitType
+  count     Int           @default(1)
+  window    Int           // Window in seconds (e.g., 60 for per-minute)
+  expiresAt DateTime
+  routeId   String?
+  route     Route?        @relation("RouteRateLimits", fields: [routeId], references: [id])
+  serviceId String?
+  service   BackendService? @relation("ServiceRateLimits", fields: [serviceId], references: [id])
+  userId    String?
+  user      User?         @relation("UserRateLimits", fields: [userId], references: [id])
+  sessionId String?
+  session   Session?      @relation("SessionRateLimits", fields: [sessionId], references: [id])
+
+  @@unique([key, type, window, routeId, serviceId, userId, sessionId], name: "rate_limit_key")
+  @@index([expiresAt])
+  @@map("rate_limits")
+}
+
+enum RateLimitType {
+  API_KEY
+  IP
+  USER
+  GLOBAL
+  SERVICE
+}
+
+// Analytics
+model AnalyticsSummary {
+  id              String        @id @default(uuid())
+  routeId         String?
+  route           Route?        @relation("RouteAnalytics", fields: [routeId], references: [id])
+  serviceId       String?
+  service         BackendService? @relation("ServiceAnalytics", fields: [serviceId], references: [id])
+  period          AnalyticsPeriod
+  startTime       DateTime
+  endTime         DateTime
+  requestCount    Int           @default(0)
+  successCount    Int           @default(0)
+  errorCount      Int           @default(0)
+  avgResponseTime Float         @default(0)
+  maxResponseTime Float         @default(0)
+  minResponseTime Float         @default(0)
+  statusCodes     Json          // Map of status codes to counts
+  userAgents      Json          // Top user agents
+  ipAddresses     Json          // Top IP addresses
+  apiKeys         Json          // Top API keys
+  createdAt       DateTime      @default(now())
+
+  @@unique([routeId, serviceId, period, startTime])
+  @@index([routeId])
+  @@index([serviceId])
+  @@index([period])
+  @@index([startTime])
+  @@map("analytics_summaries")
+}
+
+enum AnalyticsPeriod {
+  MINUTE
+  HOUR
+  DAY
+  WEEK
+  MONTH
+}
+
+// Blacklist for IPs, API keys, etc.
+model Blacklist {
+  id        String    @id @default(uuid())
+  type      BlacklistType
+  value     String    // IP, API key, user ID, etc.
+  reason    String?
+  createdAt DateTime  @default(now())
+  expiresAt DateTime? // Optional expiration for temporary blacklists
+  createdBy String
+  creator   User      @relation("BlacklistCreator", fields: [createdBy], references: [id])
+
+  @@unique([type, value])
+  @@index([type])
+  @@index([expiresAt])
+  @@map("blacklists")
+}
+
+enum BlacklistType {
+  IP
+  API_KEY
+  USER
+  SERVICE
 }
