@@ -49,6 +49,9 @@ export async function GET(request: NextRequest) {
       middlewares: route.middlewares ?? undefined,
       rateLimit: route.rateLimit ?? 100,
       cacheTtl: route.cacheTtl ?? 100,
+      id: route.id,
+      serviceId: route.serviceId,
+        
     });
   } catch (error) {
     console.error("Route configuration error:", error);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useParams } from "next/navigation";
+import { useParams, usePathname } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import {
@@ -23,6 +23,9 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import Link from "next/link";
 import { EditServiceDialog } from "@/components/EditServiceDialog";
+import { useQueryClient } from '@tanstack/react-query';
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 interface Route {
   id: string;
   path: string;
@@ -33,7 +36,9 @@ interface Route {
 }
 
 export default function ServiceDetailPage() {
+const pathname = usePathname();
   const { id } = useParams();
+  const queryClient = useQueryClient();
 
   // Fetch service details
   const { data: service, isLoading: isLoadingService } = useQuery({
@@ -54,6 +59,16 @@ export default function ServiceDetailPage() {
       return data.data;
     },
   });
+
+  // Format dates consistently
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
+  };
 
   if (isLoadingService) {
     return (

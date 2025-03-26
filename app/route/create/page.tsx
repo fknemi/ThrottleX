@@ -17,10 +17,12 @@ import { authClient } from "@/lib/auth-client";
 import { HttpMethod } from "@prisma/client";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-
+import {useRouter} from "next/navigation"
 export default function CreateRoute() {
+    const router = useRouter()
   const { data, isPending: isSessionPending } = authClient.useSession();
   const { toast } = useToast();
+
 
   const { data: services, isPending: isServicesPending } = useQuery({
     queryKey: ["services"],
@@ -116,7 +118,13 @@ export default function CreateRoute() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     createRouteMutation.mutate(formData);
-  };
+    if(formData.serviceId){
+   router.push(`/service/${formData.serviceId}`)
+
+    }else{
+        router.push("/services")
+    }
+   };
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,

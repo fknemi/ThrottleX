@@ -1,29 +1,25 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getSessionCookie } from "better-auth/cookies";
-// Rate limiting utility
-//
-//
-//
 
-// Add this utility function at the top of your middleware file
-async function logErrorToAPI(errorData: any) {
+// Enhanced logging utility
+async function logRequestToAPI(logData: any) {
     try {
-        const logEndpoint = `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/route/update/logs`;
+        const logEndpoint = `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/internal/route/update/logs`;
 
         await fetch(logEndpoint, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
+                "Internal-Auth-Token": process.env.INTERNAL_API_TOKEN || "",
             },
             body: JSON.stringify({
-                ...errorData,
-                isError: true,
+                ...logData,
                 timestamp: new Date().toISOString(),
             }),
         });
     } catch (logError) {
-        console.error("Failed to log error:", logError);
+        console.error("Failed to log request:", logError);
     }
 }
 
@@ -60,66 +56,73 @@ class RateLimiter {
     }
 }
 
-// Route configuration interface
 interface RouteConfig {
     targetUrl: string;
     middlewares?: any;
     rateLimit?: number;
     cacheTtl?: number;
     serviceMetadata?: any;
+    id: string;
+    serviceId: string;
+    status: number;
 }
 
-// Route configuration service
 class RouteConfigService {
     static async getRouteConfig(
         pathname: string,
-        method: string,
+        method: string
     ): Promise<RouteConfig | null> {
         try {
-            // Remove '/api' prefix and decode the path
-            const cleanPath = decodeURIComponent(pathname.replace(/^\/api/, ""));
-
-            // Fetch route configuration from an internal API route
+            const cleanPath = decodeURIComponent(
+                pathname.replace(/^\/api/, "")
+            );
             const response = await fetch(
                 `https://127.0.0.1:3000/api/routes/config?path=${encodeURIComponent(cleanPath)}&method=${method}`,
                     {
                     method: "GET",
                     headers: {
                         "Content-Type": "application/json",
-                        "Internal-Auth-Token": process.env.INTERNAL_API_TOKEN || "",
+                        "Internal-Auth-Token":
+                            process.env.INTERNAL_API_TOKEN || "",
                     },
-                    cache: "no-store", // Ensure fresh configuration
-                },
+                    cache: "no-store",
+                }
             );
 
             if (!response.ok) {
-                console.error(
-                    "Route config fetch failed:",
-                    response.status,
-                    response.statusText,
-                );
                 return null;
             }
 
-            return await response.json();
+            const config = await response.json();
+
+            return config;
         } catch (error) {
-            console.error("Route configuration fetch error:", error);
             return null;
         }
     }
 }
 
-// Authentication service (placeholder)
 class AuthService {
     static async validateSession(request: NextRequest): Promise<boolean> {
         const sessionToken = request.cookies.get("session_token")?.value;
-        return !!sessionToken; // Simple existence check
+        return !!sessionToken;
     }
 }
 
 export async function middleware(request: NextRequest) {
     const { pathname, search } = request.nextUrl;
     const method = request.method;
+    const ip = request.ip || "unknown";
+    const userAgent = request.headers.get("user-agent") || "unknown";
+
+    // Base log data for all requests
+    const baseLogData = {
+        path: pathname,
+        method,
+        ip,
+        userAgent,
+        timestamp: new Date().toISOString(),
+    };
 
     // Skip internal routes
     if (
@@ -127,57 +130,84 @@ export async function middleware(request: NextRequest) {
         pathname.startsWith("/api/auth") ||
     pathname.startsWith("/api/routes/")
     ) {
+        await logRequestToAPI({
+            ...baseLogData,
+            action: "Skipped internal route",
+        });
         return NextResponse.next();
     }
 
     // Process API routes
     if (pathname.startsWith("/api/")) {
         try {
-            // Fetch route configuration
-            const { pathname } = request.nextUrl;
-
             const sessionCookie = getSessionCookie(request, {
                 cookieName: "session_token",
                 cookiePrefix: "better-auth",
                 useSecureCookies: false,
             });
+
             if (!sessionCookie) {
-                //If the user is not logged in, then deny access to all protected routes.
-                if (pathname.startsWith("/dashboard") || pathname.startsWith("/api/get/user/") || pathname.startsWith("/services") || pathname.startsWith("/routes") || pathname.startsWith("/route") || pathname.startsWith("/account")) {
-                    return NextResponse.redirect(new URL("/sign-in", request.url));
+                if (
+                    pathname.startsWith("/dashboard") ||
+                    pathname.startsWith("/api/get/user/") ||
+                pathname.startsWith("/services") ||
+            pathname.startsWith("/routes") ||
+        pathname.startsWith("/route") ||
+    pathname.startsWith("/account")
+                ) {
+                    return NextResponse.redirect(
+                        new URL("/sign-in", request.url)
+                    );
                 }
 
                 return NextResponse.next();
             }
+
             const routeConfig = await RouteConfigService.getRouteConfig(
                 pathname,
-                method,
+                method
             );
 
             if (!routeConfig || !routeConfig.targetUrl) {
-                console.error("No valid route configuration found for", pathname);
                 return NextResponse.json(
                     { error: "Route not configured" },
-                    { status: 404 },
+                    { status: 404 }
                 );
             }
 
             // Authentication middleware
             const middlewares = routeConfig.middlewares;
             if (middlewares?.auth) {
-                const isAuthenticated = await AuthService.validateSession(request);
+                const isAuthenticated =
+                    await AuthService.validateSession(request);
                 if (!isAuthenticated) {
-                    return NextResponse.redirect(new URL("/sign-in", request.url));
+                    return NextResponse.redirect(
+                        new URL("/sign-in", request.url)
+                    );
                 }
             }
 
             // Rate limiting
             const rateLimiter = new RateLimiter();
-            const rateLimitKey = request.ip ?? "unknown";
+            const rateLimitKey = ip;
             const rateLimit = routeConfig.rateLimit ?? 100;
-            const { allowed, remaining } = rateLimiter.check(rateLimitKey, rateLimit);
+            const { allowed, remaining } = rateLimiter.check(
+                rateLimitKey,
+                rateLimit
+            );
 
             if (!allowed) {
+                await logRequestToAPI({
+                    ...baseLogData,
+                    statusCode: 429,
+                    error: "Rate limit exceeded",
+                    rateLimit,
+                    remaining,
+                    isError: true,
+                    routeId: routeConfig.id,
+                    serviceId: routeConfig.serviceId,
+                });
+
                 return NextResponse.json(
                     { error: "Rate limit exceeded" },
                     {
@@ -187,7 +217,7 @@ export async function middleware(request: NextRequest) {
                             "X-RateLimit-Limit": rateLimit.toString(),
                             "X-RateLimit-Remaining": "0",
                         },
-                    },
+                    }
                 );
             }
 
@@ -196,10 +226,22 @@ export async function middleware(request: NextRequest) {
             try {
                 targetUrl = new URL(routeConfig.targetUrl);
             } catch (urlError) {
-                console.error("Invalid target URL:", urlError);
+                await logRequestToAPI({
+                    ...baseLogData,
+                    statusCode: 500,
+                    error: "Invalid target URL",
+                    details:
+                        urlError instanceof Error
+                            ? urlError.message
+                            : String(urlError),
+                            isError: true,
+                            routeId: routeConfig.id,
+                            serviceId: routeConfig.serviceId,
+                });
+
                 return NextResponse.json(
                     { error: "Invalid service configuration" },
-                    { status: 500 },
+                    { status: 500 }
                 );
             }
 
@@ -211,7 +253,7 @@ export async function middleware(request: NextRequest) {
             if (serviceMetadata?.authHeader && serviceMetadata?.apiKey) {
                 proxyHeaders.set(
                     serviceMetadata.authHeader,
-                    `Bearer ${serviceMetadata.apiKey}`,
+                    `Bearer ${serviceMetadata.apiKey}`
                 );
             }
 
@@ -219,34 +261,57 @@ export async function middleware(request: NextRequest) {
             if (middlewares?.cors) {
                 proxyHeaders.set(
                     "Access-Control-Allow-Origin",
-                    middlewares.cors.origin ?? "*",
+                    middlewares.cors.origin ?? "*"
                 );
             }
 
-            // TODO: FIX ME
             // Proxy the request with timeout
             let proxyResponse;
             try {
-                console.log("TARGET URL", targetUrl.toString())
                 proxyResponse = await fetch(targetUrl, {
                     method,
-                    headers:  !proxyHeaders.keys() ? proxyHeaders : null,
-                   body:
-                       method !== "GET" && method !== "HEAD" ? request.body : undefined,
-                    redirect: "manual",
-                    signal: AbortSignal.timeout(5000), // 5-second timeout
+                    headers: proxyHeaders.keys().length > 0 ? proxyHeaders : {},
+                    body:
+                        method !== "GET" && method !== "HEAD"
+                            ? request.body
+                            : undefined,
+                            redirect: "manual",
+                            signal: AbortSignal.timeout(5000),
                 });
 
-
-    const contentType = proxyResponse.headers.get('content-type');
-    console.log(contentType)
+                await logRequestToAPI({
+                    ...baseLogData,
+                    statusCode: proxyResponse.status,
+                    action: "Proxied request",
+                    targetUrl: targetUrl.toString(),
+                    proxyStatus: proxyResponse.status,
+                    rateLimit,
+                    remaining,
+                    isError: proxyResponse.status >= 400,
+                        routeId: routeConfig.id,
+                    serviceId: routeConfig.serviceId,
+                });
             } catch (fetchError) {
-                console.error("Proxy request failed:", fetchError);
+                await logRequestToAPI({
+                    ...baseLogData,
+                    statusCode: 503,
+                    error: "Proxy request failed",
+                    details:
+                        fetchError instanceof Error
+                            ? fetchError.message
+                            : String(fetchError),
+                            targetUrl: targetUrl.toString(),
+                            isError: true,
+                            routeId: routeConfig.id,
+                            serviceId: routeConfig.serviceId,
+                });
+
                 return NextResponse.json(
                     { error: "Service unavailable" },
-                    { status: 503 },
+                    { status: 503 }
                 );
             }
+
             // Response handling
             const responseHeaders = new Headers(proxyResponse.headers);
             responseHeaders.set("X-API-Gateway", "true");
@@ -257,23 +322,19 @@ export async function middleware(request: NextRequest) {
             if (routeConfig.cacheTtl && routeConfig.cacheTtl > 0) {
                 responseHeaders.set(
                     "Cache-Control",
-                    `public, max-age=${routeConfig.cacheTtl}`,
+                    `public, max-age=${routeConfig.cacheTtl}`
                 );
             }
+
             return new NextResponse(proxyResponse.body, {
                 status: proxyResponse.status,
                 statusText: proxyResponse.statusText,
                 headers: responseHeaders,
             });
         } catch (error) {
-            console.error("API Gateway Unexpected Error:", error);
-            console.error("API Gateway Unexpected Error:", error);
-
-            // Prepare error log data
-
             return NextResponse.json(
                 { error: "Internal server error" },
-                { status: 500 },
+                { status: 500 }
             );
         }
     }
@@ -282,5 +343,12 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-    matcher: ["/api/:path*", "/dashboard/:path*", "/route/:path*", "/services/:path*", "/service/:path*"],
+    matcher: [
+        "/api/:path*",
+        "/dashboard/:path*",
+        "/route/:path*",
+        "/services/:path*",
+        "/service/:path*",
+        "/api/((?!internal|auth|routes/update/logs).*)", // Exclude logging endpoint],
+    ],
 };

@@ -6,8 +6,11 @@ export async function GET(
   { params }: { params: { id: string } },
 ) {
   try {
+    // No need to await params - they're available synchronously
+    const { id } = params;
+    
     const service = await prisma.backendService.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: {
         owner: {
           select: {
