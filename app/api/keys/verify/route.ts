@@ -25,50 +25,24 @@ async function logRequestToAPI(logData: any) {
 class RateLimiter {
     private tracker: Map<string, { count: number; resetTime: number }>;
     private windowMs: number;
-    private maxRequests: number;
-    private message: string;
 
-    constructor(config: {
-        windowMs: number;
-        maxRequests: number;
-        message?: string;
-    }) {
+    constructor(windowMs: number = 60000) {
         this.tracker = new Map();
-        this.windowMs = config.windowMs;
-        this.maxRequests = config.maxRequests;
-        this.message = config.message || "Too many requests, please try again later.";
+        this.windowMs = windowMs;
     }
 
-    check(key: string): { 
-        allowed: boolean; 
-        remaining: number;
-        resetTime: number;
-        total: number;
-    } {
+    check(key: string, limit: number): { allowed: boolean; remaining: number } {
         const now = Date.now();
         const entry = this.tracker.get(key);
 
         if (!entry || entry.resetTime < now) {
-            const newEntry = { 
-                count: 1, 
-                resetTime: now + this.windowMs 
-            };
+            const newEntry = { count: 1, resetTime: now + this.windowMs };
             this.tracker.set(key, newEntry);
-            return { 
-                allowed: true, 
-                remaining: this.maxRequests - 1,
-                resetTime: newEntry.resetTime,
-                total: this.maxRequests
-            };
+            return { allowed: true, remaining: limit - 1 };
         }
 
-        if (entry.count >= this.maxRequests) {
-            return { 
-                allowed: false, 
-                remaining: 0,
-                resetTime: entry.resetTime,
-                total: this.maxRequests
-            };
+        if (entry.count >= limit) {
+            return { allowed: false, remaining: 0 };
         }
 
         entry.count++;
@@ -76,9 +50,7 @@ class RateLimiter {
 
         return {
             allowed: true,
-            remaining: Math.max(0, this.maxRequests - entry.count),
-            resetTime: entry.resetTime,
-            total: this.maxRequests
+            remaining: Math.max(0, limit - entry.count),
         };
     }
 }
@@ -93,10 +65,7 @@ interface RouteConfig {
             origin: string;
         };
     };
-    rateLimit?: {
-        windowMs: number;
-        max: number;
-    };
+    rateLimit?: number;
     cacheTtl?: number;
     serviceMetadata?: any;
     id: string;
@@ -105,28 +74,12 @@ interface RouteConfig {
 }
 
 class RouteConfigService {
-    private static cache: Map<string, RouteConfig> = new Map();
-    private static lastFetch: number = 0;
-
     static async getRouteConfig(
         pathname: string,
         method: string
     ): Promise<RouteConfig | null> {
-        // Only check route config for API gateway routes
-        if (!pathname.startsWith("/api/gate/")) {
-            return null;
-        }
-
-        const cacheKey = `${method}:${pathname}`;
-        const now = Date.now();
-
-        // Use cached config if available and not expired (30s cache)
-        if (this.cache.has(cacheKey) && now - this.lastFetch < 30000) {
-            return this.cache.get(cacheKey) || null;
-        }
-
         try {
-            const cleanPath = decodeURIComponent(pathname.replace(/^\/api\/gate/, ""));
+            const cleanPath = decodeURIComponent(pathname.replace(/^\/api/, ""));
             const response = await fetch(
                 `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/routes/config?path=${encodeURIComponent(cleanPath)}&method=${method}`,
                 {
@@ -143,12 +96,8 @@ class RouteConfigService {
                 return null;
             }
 
-            const config = await response.json();
-            this.cache.set(cacheKey, config);
-            this.lastFetch = now;
-            return config;
+            return await response.json();
         } catch (error) {
-            console.error("Failed to fetch route config:", error);
             return null;
         }
     }
@@ -167,10 +116,7 @@ class AuthService {
             name: string;
             prefix: string;
             scopes: string[];
-            rateLimit?: {
-                windowMs: number;
-                max: number;
-            };
+            rateLimit: number;
             expiresAt: Date | null;
             createdAt: Date;
             service?: { id: string; name: string };
@@ -201,17 +147,10 @@ class AuthService {
     }
 }
 
-// Global rate limiter for API gateway routes only
-const apiGatewayRateLimiter = new RateLimiter({
-    windowMs: 60000, // 1 minute window
-    maxRequests: 1000, // 1000 requests per IP per minute
-    message: "Too many requests to the API gateway"
-});
-
 export async function middleware(request: NextRequest) {
     const { pathname } = request.nextUrl;
     const method = request.method;
-    const ip = request.ip || request.headers.get("x-forwarded-for") || "unknown";
+    const ip = request.ip || "unknown";
     const userAgent = request.headers.get("user-agent") || "unknown";
 
     // Base log data for all requests
@@ -236,24 +175,40 @@ export async function middleware(request: NextRequest) {
         return NextResponse.next();
     }
 
-    // Only check route configuration for API gateway routes
-    if (pathname.startsWith("/api/gate/")) {
-        const routeConfig = await RouteConfigService.getRouteConfig(pathname, method);
-        
-        if (!routeConfig) {
+    // Get route configuration
+    const routeConfig = await RouteConfigService.getRouteConfig(pathname, method);
+    
+    if (!routeConfig) {
+        await logRequestToAPI({
+            ...baseLogData,
+            statusCode: 404,
+            error: "Route not configured",
+            isError: true,
+        });
+        return NextResponse.json(
+            { error: "Route not configured" },
+            { status: 404 }
+        );
+    }
+
+    // Authentication middleware
+    if (routeConfig.middlewares?.auth) {
+        const isAuthenticated = await AuthService.validateSession(request);
+        if (!isAuthenticated) {
             await logRequestToAPI({
                 ...baseLogData,
-                statusCode: 404,
-                error: "Route not configured",
+                statusCode: 401,
+                error: "Unauthorized",
                 isError: true,
+                routeId: routeConfig.id,
+                serviceId: routeConfig.serviceId,
             });
-            return NextResponse.json(
-                { error: "Route not configured" },
-                { status: 404 }
-            );
+            return NextResponse.redirect(new URL("/sign-in", request.url));
         }
+    }
 
-        // API Key middleware for gateway routes
+    // API Key middleware
+    if (pathname.startsWith("/api/gate/") || routeConfig.middlewares?.apiKey) {
         const authHeader = request.headers.get("authorization");
         const apiKey = authHeader?.split(" ")[1]; // Bearer <token>
 
@@ -292,7 +247,7 @@ export async function middleware(request: NextRequest) {
         const requiredScopes = routeConfig.middlewares?.requiredScopes || [];
         if (requiredScopes.length > 0) {
             const hasRequiredScopes = requiredScopes.every(scope =>
-                verification.key!.scopes.includes(scope)
+                verification.key.scopes.includes(scope)
             );
 
             if (!hasRequiredScopes) {
@@ -304,7 +259,7 @@ export async function middleware(request: NextRequest) {
                     routeId: routeConfig.id,
                     serviceId: routeConfig.serviceId,
                     requiredScopes,
-                    actualScopes: verification.key!.scopes,
+                    actualScopes: verification.key.scopes,
                 });
                 return NextResponse.json(
                     { error: "Insufficient permissions" },
@@ -313,150 +268,133 @@ export async function middleware(request: NextRequest) {
             }
         }
 
-        // Add verified key info to headers for downstream services
-        const newHeaders = new Headers(request.headers);
-        newHeaders.set("X-Api-Key-Id", verification.key!.id);
-        newHeaders.set("X-Api-Key-User", verification.key!.user.id);
-        newHeaders.set("X-Api-Key-Scopes", verification.key!.scopes.join(","));
+        // Apply rate limiting from API key if not overridden by route config
+        const rateLimit = routeConfig.rateLimit ?? verification.key.rateLimit;
+        
+        // Rate limiting
+        const rateLimiter = new RateLimiter();
+        const rateLimitKey = `${verification.key.id}:${ip}`;
+        const { allowed, remaining } = rateLimiter.check(rateLimitKey, rateLimit);
 
-        // Apply global rate limiting
-        const globalLimit = apiGatewayRateLimiter.check(ip);
-        if (!globalLimit.allowed) {
+        if (!allowed) {
             await logRequestToAPI({
                 ...baseLogData,
                 statusCode: 429,
-                error: "API gateway rate limit exceeded",
+                error: "Rate limit exceeded",
+                rateLimit,
+                remaining,
                 isError: true,
                 routeId: routeConfig.id,
                 serviceId: routeConfig.serviceId,
+                apiKeyId: verification.key.id,
             });
 
             return NextResponse.json(
-                { error: apiGatewayRateLimiter.message },
+                { error: "Rate limit exceeded" },
                 {
                     status: 429,
                     headers: {
                         "Retry-After": "60",
-                        "X-RateLimit-Limit": globalLimit.total.toString(),
+                        "X-RateLimit-Limit": rateLimit.toString(),
                         "X-RateLimit-Remaining": "0",
-                        "X-RateLimit-Reset": globalLimit.resetTime.toString()
-                    }
+                    },
                 }
             );
         }
 
-        // Apply route-specific or API key rate limiting
-        const rateLimitConfig = routeConfig.rateLimit || verification.key!.rateLimit;
-        if (rateLimitConfig) {
-            const routeRateLimiter = new RateLimiter({
-                windowMs: rateLimitConfig.windowMs,
-                maxRequests: rateLimitConfig.max
-            });
+        // Add verified key info to headers for downstream services
+        const newHeaders = new Headers(request.headers);
+        newHeaders.set("X-Api-Key-Id", verification.key.id);
+        newHeaders.set("X-Api-Key-User", verification.key.user.id);
+        newHeaders.set("X-Api-Key-Scopes", verification.key.scopes.join(","));
+        newHeaders.set("X-RateLimit-Limit", rateLimit.toString());
+        newHeaders.set("X-RateLimit-Remaining", remaining.toString());
 
-            const rateLimitKey = `${verification.key!.id}:${ip}`;
-            const { allowed, remaining, resetTime, total } = routeRateLimiter.check(rateLimitKey);
+        // For API gateway routes, we'll proxy the request
+        if (pathname.startsWith("/api/gate/")) {
+            try {
+                const targetUrl = new URL(
+                    pathname.replace(/^\/api\/gate/, routeConfig.targetUrl),
+                    process.env.NEXT_PUBLIC_API_BASE_URL
+                );
 
-            if (!allowed) {
+                // Add original query parameters
+                if (request.nextUrl.search) {
+                    targetUrl.search = request.nextUrl.search;
+                }
+
+                // Add service authentication headers if configured
+                if (routeConfig.serviceMetadata?.authHeader && routeConfig.serviceMetadata?.apiKey) {
+                    newHeaders.set(
+                        routeConfig.serviceMetadata.authHeader,
+                        `Bearer ${routeConfig.serviceMetadata.apiKey}`
+                    );
+                }
+
+                // Proxy the request
+                const proxyResponse = await fetch(targetUrl, {
+                    method,
+                    headers: newHeaders,
+                    body: method !== "GET" && method !== "HEAD" ? request.body : undefined,
+                    redirect: "manual",
+                    signal: AbortSignal.timeout(5000),
+                });
+
                 await logRequestToAPI({
                     ...baseLogData,
-                    statusCode: 429,
-                    error: "API rate limit exceeded",
+                    statusCode: proxyResponse.status,
+                    action: "Proxied request",
+                    targetUrl: targetUrl.toString(),
+                    proxyStatus: proxyResponse.status,
+                    rateLimit,
+                    remaining,
+                    isError: proxyResponse.status >= 400,
+                    routeId: routeConfig.id,
+                    serviceId: routeConfig.serviceId,
+                    apiKeyId: verification.key.id,
+                });
+
+                // Return the proxied response
+                const responseHeaders = new Headers(proxyResponse.headers);
+                responseHeaders.set("X-API-Gateway", "true");
+                responseHeaders.set("X-RateLimit-Limit", rateLimit.toString());
+                responseHeaders.set("X-RateLimit-Remaining", remaining.toString());
+
+                return new NextResponse(proxyResponse.body, {
+                    status: proxyResponse.status,
+                    statusText: proxyResponse.statusText,
+                    headers: responseHeaders,
+                });
+            } catch (error) {
+                await logRequestToAPI({
+                    ...baseLogData,
+                    statusCode: 503,
+                    error: "Proxy request failed",
+                    details: error instanceof Error ? error.message : String(error),
                     isError: true,
                     routeId: routeConfig.id,
                     serviceId: routeConfig.serviceId,
-                    apiKeyId: verification.key!.id,
+                    apiKeyId: verification.key.id,
                 });
 
                 return NextResponse.json(
-                    { error: "API rate limit exceeded" },
-                    {
-                        status: 429,
-                        headers: {
-                            "Retry-After": "60",
-                            "X-RateLimit-Limit": total.toString(),
-                            "X-RateLimit-Remaining": "0",
-                            "X-RateLimit-Reset": resetTime.toString()
-                        }
-                    }
+                    { error: "Service unavailable" },
+                    { status: 503 }
                 );
             }
-
-            // Add rate limit headers
-            newHeaders.set("X-RateLimit-Limit", total.toString());
-            newHeaders.set("X-RateLimit-Remaining", remaining.toString());
-            newHeaders.set("X-RateLimit-Reset", resetTime.toString());
         }
 
-        // Proxy the request to the target service
-        try {
-            const targetUrl = new URL(
-                pathname.replace(/^\/api\/gate/, routeConfig.targetUrl),
-                process.env.NEXT_PUBLIC_API_BASE_URL
-            );
-
-            // Preserve query parameters
-            if (request.nextUrl.search) {
-                targetUrl.search = request.nextUrl.search;
-            }
-
-            // Add service authentication headers if configured
-            if (routeConfig.serviceMetadata?.authHeader && routeConfig.serviceMetadata?.apiKey) {
-                newHeaders.set(
-                    routeConfig.serviceMetadata.authHeader,
-                    `Bearer ${routeConfig.serviceMetadata.apiKey}`
-                );
-            }
-
-            // Proxy the request
-            const proxyResponse = await fetch(targetUrl, {
-                method,
+        // For non-gateway API routes that require API keys
+        const response = NextResponse.next({
+            request: {
                 headers: newHeaders,
-                body: method !== "GET" && method !== "HEAD" ? request.body : undefined,
-                redirect: "manual",
-                signal: AbortSignal.timeout(5000),
-            });
+            },
+        });
 
-            await logRequestToAPI({
-                ...baseLogData,
-                statusCode: proxyResponse.status,
-                action: "Proxied request",
-                targetUrl: targetUrl.toString(),
-                proxyStatus: proxyResponse.status,
-                isError: proxyResponse.status >= 400,
-                routeId: routeConfig.id,
-                serviceId: routeConfig.serviceId,
-                apiKeyId: verification.key!.id,
-            });
-
-            // Return the proxied response
-            const responseHeaders = new Headers(proxyResponse.headers);
-            responseHeaders.set("X-API-Gateway", "true");
-
-            return new NextResponse(proxyResponse.body, {
-                status: proxyResponse.status,
-                statusText: proxyResponse.statusText,
-                headers: responseHeaders,
-            });
-        } catch (error) {
-            await logRequestToAPI({
-                ...baseLogData,
-                statusCode: 503,
-                error: "Proxy request failed",
-                details: error instanceof Error ? error.message : String(error),
-                isError: true,
-                routeId: routeConfig.id,
-                serviceId: routeConfig.serviceId,
-                apiKeyId: verification.key!.id,
-            });
-
-            return NextResponse.json(
-                { error: "Service unavailable" },
-                { status: 503 }
-            );
-        }
+        return response;
     }
 
-    // Handle dashboard and protected pages
+    // Handle non-API key routes (dashboard, etc.)
     if (
         pathname.startsWith("/dashboard") ||
         pathname.startsWith("/account") ||
@@ -474,7 +412,6 @@ export async function middleware(request: NextRequest) {
         }
     }
 
-    // For all other routes (including /dashboard), just continue
     return NextResponse.next();
 }
 
