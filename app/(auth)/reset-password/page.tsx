@@ -125,7 +125,7 @@ function ResetPasswordContent() {
                 )}
               />
 
-              <LoadingButton pending={isPending}>Reset Password</LoadingButton>
+              <LoadingButton className={"s"} pending={isPending}>Reset Password</LoadingButton>
             </form>
           </Form>
         </CardContent>

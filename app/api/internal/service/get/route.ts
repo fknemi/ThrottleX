@@ -1,6 +1,6 @@
 // app/api/internal/service/get/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
+import {prisma} from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 

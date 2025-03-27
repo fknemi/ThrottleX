@@ -4,7 +4,7 @@ import { authClient } from "@/lib/auth-client";
 import Link from "next/link";
 import SignoutButton from "@/components/signout-button";
 import { Button } from "@/components/ui/button";
-import prisma from "@/lib/prisma";
+import {prisma} from "@/lib/prisma";
 import { cn } from "@/lib/utils";
 import { buttonVariants } from "@/components/ui/button";
 import { ArrowRight, Dot } from "lucide-react";

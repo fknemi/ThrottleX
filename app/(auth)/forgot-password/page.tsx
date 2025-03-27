@@ -82,7 +82,7 @@ export default function ForgotPassword() {
                   </FormItem>
                 )}
               />
-              <LoadingButton pending={isPending}>Send Reset Link</LoadingButton>
+              <LoadingButton className={"w-full"} pending={isPending}>Send Reset Link</LoadingButton>
             </form>
           </Form>
         </CardContent>

@@ -5,10 +5,10 @@ export default function LoadingButton({
   onClick,
   className,
 }: {
-  pending: boolean;
-  children: React.ReactNode;
+  pending?: boolean;
+  children?: React.ReactNode;
   onClick?: () => void;
-  className: string;
+  className?: string;
 }) {
   return (
     <Button
