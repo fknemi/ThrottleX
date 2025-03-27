@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { PlusCircle, Search, Filter, Loader2, Trash } from "lucide-react";
+import { PlusCircle, Search, Filter, Loader2, Trash, Pencil } from "lucide-react";
 import axios from "axios";
 
 import { Button } from "@/components/ui/button";
@@ -35,7 +35,16 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useToast } from "@/hooks/use-toast"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { useToast } from "@/hooks/use-toast";
 
 interface Route {
   id: string;
@@ -45,6 +54,7 @@ interface Route {
   isActive: boolean;
   service?: {
     name: string;
+    id: string;
   };
   tags?: string[];
 }
@@ -60,15 +70,17 @@ interface ApiResponse {
 
 export default function RoutesPage() {
   const router = useRouter();
-  const {toast} = useToast()
+  const { toast } = useToast();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState({});
   const [page, setPage] = useState(1);
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [routeToDelete, setRouteToDelete] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editingRoute, setEditingRoute] = useState<Route | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   const { data, isLoading, isError } = useQuery<ApiResponse>({
     queryKey: ["routes", { search, ...filters, page, limit: 10 }],
@@ -103,7 +115,6 @@ export default function RoutesPage() {
         description: "The route has been successfully deleted.",
       });
 
-      // Refresh the routes list
       queryClient.invalidateQueries(["routes"]);
     } catch (error) {
       toast({
@@ -119,9 +130,65 @@ export default function RoutesPage() {
   };
 
   const openDeleteDialog = (routeId: string, e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent row click from triggering
+    e.stopPropagation();
     setRouteToDelete(routeId);
     setDeleteDialogOpen(true);
+  };
+
+  const openEditDialog = (route: Route, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingRoute(route);
+    setEditDialogOpen(true);
+  };
+
+  const handleEditSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+  if (!editingRoute) return;
+
+  setIsSaving(true);
+  try {
+    await axios.put("/api/internal/route/update", {  // Changed endpoint to match backend
+      routeId: editingRoute.id,  // Explicitly include routeId
+      path: editingRoute.path,
+      method: editingRoute.method,
+      targetUrl: editingRoute.targetUrl,
+      isActive: editingRoute.isActive,
+      tags: editingRoute.tags,
+    });
+
+    toast({
+      title: "Route updated",
+      description: "The route has been successfully updated.",
+    });
+
+    queryClient.invalidateQueries(["routes"]);
+    setEditDialogOpen(false);
+  } catch (error: any) {
+    console.error("Update error:", error.response?.data);
+    toast({
+      title: "Error",
+      description: error.response?.data?.message || "Failed to update the route",
+      variant: "destructive",
+    });
+  } finally {
+    setIsSaving(false);
+  }
+};
+  const handleInputChange = (field: keyof Route, value: any) => {
+    if (!editingRoute) return;
+    setEditingRoute({
+      ...editingRoute,
+      [field]: value,
+    });
+  };
+
+  const handleTagsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!editingRoute) return;
+    const tags = e.target.value.split(",").map(tag => tag.trim());
+    setEditingRoute({
+      ...editingRoute,
+      tags,
+    });
   };
 
   return (
@@ -239,14 +306,24 @@ export default function RoutesPage() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={(e) => openDeleteDialog(route.id, e)}
-                        className="text-red-500 hover:text-red-700"
-                      >
-                        <Trash className="h-4 w-4" />
-                      </Button>
+                      <div className="flex items-center space-x-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => openEditDialog(route, e)}
+                          className="text-blue-500 hover:text-blue-700"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => openDeleteDialog(route.id, e)}
+                          className="text-red-500 hover:text-red-700"
+                        >
+                          <Trash className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))
@@ -297,6 +374,100 @@ export default function RoutesPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Edit dialog */}
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>Edit Route</DialogTitle>
+          </DialogHeader>
+          {editingRoute && (
+            <form onSubmit={handleEditSubmit} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="path">Path</Label>
+                  <Input
+                    id="path"
+                    value={editingRoute.path}
+                    onChange={(e) => handleInputChange("path", e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="method">Method</Label>
+                  <Select
+                    value={editingRoute.method}
+                    onValueChange={(value) => handleInputChange("method", value)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select method" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="GET">GET</SelectItem>
+                      <SelectItem value="POST">POST</SelectItem>
+                      <SelectItem value="PUT">PUT</SelectItem>
+                      <SelectItem value="PATCH">PATCH</SelectItem>
+                      <SelectItem value="DELETE">DELETE</SelectItem>
+                      <SelectItem value="HEAD">HEAD</SelectItem>
+                      <SelectItem value="OPTIONS">OPTIONS</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="targetUrl">Target URL</Label>
+                <Input
+                  id="targetUrl"
+                  value={editingRoute.targetUrl}
+                  onChange={(e) => handleInputChange("targetUrl", e.target.value)}
+                  required
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="tags">Tags (comma separated)</Label>
+                <Input
+                  id="tags"
+                  value={editingRoute.tags?.join(", ") || ""}
+                  onChange={handleTagsChange}
+                  placeholder="tag1, tag2, tag3"
+                />
+              </div>
+              
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="isActive"
+                  checked={editingRoute.isActive}
+                  onCheckedChange={(checked) => handleInputChange("isActive", checked)}
+                />
+                <Label htmlFor="isActive">Active</Label>
+              </div>
+              
+              <div className="flex justify-end space-x-2 pt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setEditDialogOpen(false)}
+                  disabled={isSaving}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={isSaving}>
+                  {isSaving ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    "Save Changes"
+                  )}
+                </Button>
+              </div>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -99,7 +99,10 @@ export default function Navbar() {
                 )}
             </AnimatePresence>
             <div className="flex-row items-center justify-center gap-4 bg-black-primary text-white rounded-full py-2 px-4 backdrop-blur-md hidden md:flex">
-                {pages.map((page) => {
+                {
+
+!session ? 
+                    pages.slice(0,5).map((page) => {
                     if(session && !page.protected){return null}
                     return (
 
@@ -114,7 +117,28 @@ export default function Navbar() {
                             <span className="ml-[-2px]">{page.title}</span>
                         </Link>
                     );
-                })}
+                })
+: (
+                pages.slice(5,8).map((page) => {
+                    if(session && !page.protected){return null}
+                    return (
+
+                        <Link
+                            key={uuidv4()}
+                            href={page.route}
+                            className="font-medium font-sans flex flex-row align-center items-center"
+                        >
+                            {page.route === pathname && (
+                                <Dot size={32} strokeWidth={1.5} />
+                            )}
+                            <span className="ml-[-2px]">{page.title}</span>
+                        </Link>
+                    );
+                })
+
+)
+
+                }
                 <NavigationMenu>
                     <NavigationMenuList>
                         <NavigationMenuItem>
@@ -206,26 +230,26 @@ function MobileNav({
                 <X size={24} />
             </span>
             <section className="flex flex-col gap-4 justify-center items-start pl-4 text-4xl font-sans font-bold mt-[-4rem]">
-                {pages.slice(0, 5).map(({ title, route }) => {
-                    return (
-                        <Link key={uuidv4()} href={route}>
-                            {title}
-                        </Link>
-                    );
-                })}
-            </section>
+            {!session ? (
+    pages.slice(0, 5).map(({ title, route }) => {
+        return (
+            <Link key={uuidv4()} href={route}>
+                {title}
+            </Link>
+        );
+    })
+) : (
+    pages.slice(5, 8).map(({ title, route }) => {
+        return (
+            <Link key={uuidv4()} href={route}>
+                {title}
+            </Link>
+        );
+    })
+)}
+                    </section>
 
-            <section className="flex flex-col gap-2 justify-center items-start pl-4 text-xl font-sans font-bold pt-10">
-                {pages.slice(5, 8).map(({ title, route }) => {
-                    return (
-                        <Link key={uuidv4()} href={route}>
-                            {title}
-                        </Link>
-                    );
-                })}
-            </section>
-
-            <section className="flex justify-start items-end p-4">
+                        <section className="flex justify-start items-end p-4">
                 <AuthButtons
                     session={session}
                     className="md:flex w-full md:w-fit"

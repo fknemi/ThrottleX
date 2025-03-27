@@ -4,22 +4,22 @@ import { getSessionCookie } from "better-auth/cookies";
 
 // Enhanced logging utility
 async function logRequestToAPI(logData: any) {
-    try {
-        const logEndpoint = `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/internal/route/update/logs`;
-        await fetch(logEndpoint, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "Internal-Auth-Token": process.env.INTERNAL_API_TOKEN || "",
-            },
-            body: JSON.stringify({
-                ...logData,
-                timestamp: new Date().toISOString(),
-            }),
-        });
-    } catch (logError) {
-        console.error("Failed to log request:", logError);
-    }
+    // try {
+    //     const logEndpoint = `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/internal/route/update/logs`;
+    //     await fetch(logEndpoint, {
+    //         method: "POST",
+    //         headers: {
+    //             "Content-Type": "application/json",
+    //             "Internal-Auth-Token": process.env.INTERNAL_API_TOKEN || "",
+    //         },
+    //         body: JSON.stringify({
+    //             ...logData,
+    //             timestamp: new Date().toISOString(),
+    //         }),
+    //     });
+    // } catch (logError) {
+    //     console.error("Failed to log request:", logError);
+    // }
 }
 
 class RateLimiter {
@@ -36,11 +36,12 @@ class RateLimiter {
         this.tracker = new Map();
         this.windowMs = config.windowMs;
         this.maxRequests = config.maxRequests;
-        this.message = config.message || "Too many requests, please try again later.";
+        this.message =
+            config.message || "Too many requests, please try again later.";
     }
 
-    check(key: string): { 
-        allowed: boolean; 
+    check(key: string): {
+        allowed: boolean;
         remaining: number;
         resetTime: number;
         total: number;
@@ -49,25 +50,25 @@ class RateLimiter {
         const entry = this.tracker.get(key);
 
         if (!entry || entry.resetTime < now) {
-            const newEntry = { 
-                count: 1, 
-                resetTime: now + this.windowMs 
+            const newEntry = {
+                count: 1,
+                resetTime: now + this.windowMs,
             };
             this.tracker.set(key, newEntry);
-            return { 
-                allowed: true, 
+            return {
+                allowed: true,
                 remaining: this.maxRequests - 1,
                 resetTime: newEntry.resetTime,
-                total: this.maxRequests
+                total: this.maxRequests,
             };
         }
 
         if (entry.count >= this.maxRequests) {
-            return { 
-                allowed: false, 
+            return {
+                allowed: false,
                 remaining: 0,
                 resetTime: entry.resetTime,
-                total: this.maxRequests
+                total: this.maxRequests,
             };
         }
 
@@ -78,7 +79,7 @@ class RateLimiter {
             allowed: true,
             remaining: Math.max(0, this.maxRequests - entry.count),
             resetTime: entry.resetTime,
-            total: this.maxRequests
+            total: this.maxRequests,
         };
     }
 }
@@ -126,14 +127,17 @@ class RouteConfigService {
         }
 
         try {
-            const cleanPath = decodeURIComponent(pathname.replace(/^\/api\/gate/, ""));
+            const cleanPath = decodeURIComponent(
+                pathname.replace(/^\/api\/gate/, "")
+            );
             const response = await fetch(
                 `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/routes/config?path=${encodeURIComponent(cleanPath)}&method=${method}`,
                 {
                     method: "GET",
                     headers: {
                         "Content-Type": "application/json",
-                        "Internal-Auth-Token": process.env.INTERNAL_API_TOKEN || "",
+                        "Internal-Auth-Token":
+                            process.env.INTERNAL_API_TOKEN || "",
                     },
                     cache: "no-store",
                 }
@@ -179,24 +183,33 @@ class AuthService {
         error?: string;
     }> {
         try {
-            const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/keys/verify`, {
-                method: "POST",
-                headers: {
-                    "Authorization": `Bearer ${apiKey}`,
-                    "Content-Type": "application/json",
-                },
-            });
+            const response = await fetch(
+                `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/keys/verify`,
+                {
+                    method: "POST",
+                    headers: {
+                        Authorization: `Bearer ${apiKey}`,
+                        "Content-Type": "application/json",
+                    },
+                }
+            );
 
             const data = await response.json();
-            
-            if (!response.ok) {
-                return { valid: false, error: data.error || "API key verification failed" };
-            }
 
-            return { valid: true, key: data.key };
+            if (!response.ok) {
+                return {
+                    valid: false,
+                    error: data.error || "API key verification failed",
+                };
+            }
+            console.log(data);
+            return { valid: true, key: data.keyDetails };
         } catch (error) {
             console.error("API key verification error:", error);
-            return { valid: false, error: "Internal server error during API key verification" };
+            return {
+                valid: false,
+                error: "Internal server error during API key verification",
+            };
         }
     }
 }
@@ -205,13 +218,14 @@ class AuthService {
 const apiGatewayRateLimiter = new RateLimiter({
     windowMs: 60000, // 1 minute window
     maxRequests: 1000, // 1000 requests per IP per minute
-    message: "Too many requests to the API gateway"
+    message: "Too many requests to the API gateway",
 });
 
 export async function middleware(request: NextRequest) {
     const { pathname } = request.nextUrl;
     const method = request.method;
-    const ip = request.ip || request.headers.get("x-forwarded-for") || "unknown";
+    const ip =
+        request.ip || request.headers.get("x-forwarded-for") || "unknown";
     const userAgent = request.headers.get("user-agent") || "unknown";
 
     // Base log data for all requests
@@ -238,8 +252,11 @@ export async function middleware(request: NextRequest) {
 
     // Only check route configuration for API gateway routes
     if (pathname.startsWith("/api/gate/")) {
-        const routeConfig = await RouteConfigService.getRouteConfig(pathname, method);
-        
+        const routeConfig = await RouteConfigService.getRouteConfig(
+            pathname,
+            method
+        );
+
         if (!routeConfig) {
             await logRequestToAPI({
                 ...baseLogData,
@@ -273,6 +290,7 @@ export async function middleware(request: NextRequest) {
         }
 
         const verification = await AuthService.verifyApiKey(apiKey);
+        console.log(verification);
         if (!verification.valid || !verification.key) {
             await logRequestToAPI({
                 ...baseLogData,
@@ -291,7 +309,7 @@ export async function middleware(request: NextRequest) {
         // Check required scopes
         const requiredScopes = routeConfig.middlewares?.requiredScopes || [];
         if (requiredScopes.length > 0) {
-            const hasRequiredScopes = requiredScopes.every(scope =>
+            const hasRequiredScopes = requiredScopes.every((scope) =>
                 verification.key!.scopes.includes(scope)
             );
 
@@ -339,22 +357,24 @@ export async function middleware(request: NextRequest) {
                         "Retry-After": "60",
                         "X-RateLimit-Limit": globalLimit.total.toString(),
                         "X-RateLimit-Remaining": "0",
-                        "X-RateLimit-Reset": globalLimit.resetTime.toString()
-                    }
+                        "X-RateLimit-Reset": globalLimit.resetTime.toString(),
+                    },
                 }
             );
         }
 
         // Apply route-specific or API key rate limiting
-        const rateLimitConfig = routeConfig.rateLimit || verification.key!.rateLimit;
+        const rateLimitConfig =
+            routeConfig.rateLimit || verification.key!.rateLimit;
         if (rateLimitConfig) {
             const routeRateLimiter = new RateLimiter({
                 windowMs: rateLimitConfig.windowMs,
-                maxRequests: rateLimitConfig.max
+                maxRequests: rateLimitConfig.max,
             });
 
             const rateLimitKey = `${verification.key!.id}:${ip}`;
-            const { allowed, remaining, resetTime, total } = routeRateLimiter.check(rateLimitKey);
+            const { allowed, remaining, resetTime, total } =
+                routeRateLimiter.check(rateLimitKey);
 
             if (!allowed) {
                 await logRequestToAPI({
@@ -375,24 +395,21 @@ export async function middleware(request: NextRequest) {
                             "Retry-After": "60",
                             "X-RateLimit-Limit": total.toString(),
                             "X-RateLimit-Remaining": "0",
-                            "X-RateLimit-Reset": resetTime.toString()
-                        }
+                            "X-RateLimit-Reset": resetTime.toString(),
+                        },
                     }
                 );
             }
 
             // Add rate limit headers
-            newHeaders.set("X-RateLimit-Limit", total.toString());
-            newHeaders.set("X-RateLimit-Remaining", remaining.toString());
-            newHeaders.set("X-RateLimit-Reset", resetTime.toString());
+            // newHeaders.set("X-RateLimit-Limit", total.toString());
+            // newHeaders.set("X-RateLimit-Remaining", remaining.toString());
+            // newHeaders.set("X-RateLimit-Reset", resetTime.toString());
         }
 
         // Proxy the request to the target service
         try {
-            const targetUrl = new URL(
-                pathname.replace(/^\/api\/gate/, routeConfig.targetUrl),
-                process.env.NEXT_PUBLIC_API_BASE_URL
-            );
+            const targetUrl = new URL(routeConfig.targetUrl);
 
             // Preserve query parameters
             if (request.nextUrl.search) {
@@ -400,7 +417,10 @@ export async function middleware(request: NextRequest) {
             }
 
             // Add service authentication headers if configured
-            if (routeConfig.serviceMetadata?.authHeader && routeConfig.serviceMetadata?.apiKey) {
+            if (
+                routeConfig.serviceMetadata?.authHeader &&
+                routeConfig.serviceMetadata?.apiKey
+            ) {
                 newHeaders.set(
                     routeConfig.serviceMetadata.authHeader,
                     `Bearer ${routeConfig.serviceMetadata.apiKey}`
@@ -410,8 +430,11 @@ export async function middleware(request: NextRequest) {
             // Proxy the request
             const proxyResponse = await fetch(targetUrl, {
                 method,
-                headers: newHeaders,
-                body: method !== "GET" && method !== "HEAD" ? request.body : undefined,
+                headers: !newHeaders.keys() ? request.headers : {},
+                body:
+                    method !== "GET" && method !== "HEAD"
+                        ? request.body
+                        : undefined,
                 redirect: "manual",
                 signal: AbortSignal.timeout(5000),
             });

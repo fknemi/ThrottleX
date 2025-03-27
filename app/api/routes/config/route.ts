@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
 
     const route = await prisma.route.findFirst({
       where: {
-        path: `/api/${path}`,
+        path: `/api/gate/${path}`,
         method: method as HttpMethod,
         isActive: true,
       },

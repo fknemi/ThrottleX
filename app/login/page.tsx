@@ -14,8 +14,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useRouter } from "next/navigation";
 
 const LoginPage = () => {
+    const router = useRouter()
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -30,7 +32,7 @@ const LoginPage = () => {
         email: identifier,
         password,
       });
-      //router.push('/');
+      router.push('/dashboard');
     } catch (err: any) {
       setError(err.message || "Login failed"); // Handle errors
     }

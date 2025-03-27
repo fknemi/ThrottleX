@@ -58,6 +58,12 @@ export const pagesStore = create<PagesStoreState>((set) => ({
         protected: true
     },
 
+{
+        title: "API Keys",
+        route: "/keys",
+        protected: true
+    },
+
 
 
 
