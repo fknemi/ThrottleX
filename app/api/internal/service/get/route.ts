@@ -1,93 +1,92 @@
-// pages/api/internal/service/get.ts
-import { NextApiRequest, NextApiResponse } from "next";
+// app/api/internal/service/get/route.ts
+import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse,
-) {
-  if (req.method !== "GET") {
-    return res.status(405).json({ message: "Method not allowed" });
-  }
+export async function GET(req: NextRequest) {
+    try {
+        const session = await auth.api.getSession({
+            headers: await headers(),
+        });
 
-  try {
-    const session = await auth.api.getSession({
-      headers: await headers(),
-    });
 
-    if (!session) {
-      return res.status(401).json({ message: "Unauthorized" });
+
+        if (!session) {
+            return NextResponse.json(
+                { message: "Unauthorized" },
+                { status: 401 }
+            );
+        }
+
+        const { searchParams } = new URL(req.url);
+        const search = searchParams.get("search");
+        const page = parseInt(searchParams.get("page") || "1");
+        const limit = parseInt(searchParams.get("limit") || "10");
+        const ownerId = searchParams.get("ownerId");
+        const status = searchParams.get("status");
+        const includeRoutes = searchParams.get("includeRoutes") === "true";
+
+        const skip = (page - 1) * limit;
+
+        const where = {
+            ...(search && {
+                OR: [
+                    { name: { contains: search, mode: "insensitive" } },
+                    { description: { contains: search, mode: "insensitive" } },
+                    { tags: { hasSome: [search] } },
+                ],
+            }),
+            ...(ownerId && { ownerId }),
+            ...(status && { status }),
+        };
+
+        const services = await prisma.backendService.findMany({
+            where,
+            skip,
+            take: limit,
+            include: {
+                owner: {
+                    select: {
+                        id: true,
+                        name: true,
+                        email: true,
+                    },
+                },
+                ...(includeRoutes && {
+                    routes: true,
+                }),
+                _count: {
+                    select: {
+                        routes: true,
+                        apiKeys: true,
+                    },
+                },
+            },
+            orderBy: {
+                createdAt: "desc",
+            },
+        });
+
+        const totalCount = await prisma.backendService.count({ where });
+
+        return NextResponse.json({
+            data: services,
+            pagination: {
+                total: totalCount,
+                page,
+                limit,
+                hasNext: skip + limit < totalCount,
+            },
+        });
+    } catch (error) {
+        console.error("Error fetching services:", error);
+        return NextResponse.json(
+            {
+                message: "Internal server error",
+                error: error instanceof Error ? error.message : "Unknown error",
+            },
+            { status: 500 }
+        );
     }
-
-    const {
-      search,
-      page = 1,
-      limit = 10,
-      ownerId,
-      status,
-      includeRoutes = false,
-    } = req.query;
-
-    const skip = (Number(page) - 1) * Number(limit);
-    const take = Number(limit);
-
-    const where = {
-      ...(search && {
-        OR: [
-          { name: { contains: search as string, mode: "insensitive" } },
-          { description: { contains: search as string, mode: "insensitive" } },
-          { tags: { hasSome: [search as string] } },
-        ],
-      }),
-      ...(ownerId && { ownerId: ownerId as string }),
-      ...(status && { status: status as string }),
-    };
-
-    const services = await prisma.backendService.findMany({
-      where,
-      skip,
-      take,
-      include: {
-        owner: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
-        },
-        ...(includeRoutes === "true" && {
-          routes: true,
-        }),
-        _count: {
-          select: {
-            routes: true,
-            apiKeys: true,
-          },
-        },
-      },
-      orderBy: {
-        createdAt: "desc",
-      },
-    });
-
-    const totalCount = await prisma.backendService.count({ where });
-
-    return res.status(200).json({
-      data: services,
-      pagination: {
-        total: totalCount,
-        page: Number(page),
-        limit: Number(limit),
-        hasNext: skip + take < totalCount,
-      },
-    });
-  } catch (error) {
-    console.error("Error fetching services:", error);
-    return res.status(500).json({
-      message: "Internal server error",
-      error: error instanceof Error ? error.message : "Unknown error",
-    });
-  }
 }

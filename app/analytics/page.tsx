@@ -6,7 +6,7 @@ import axios from "axios";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-
+import { useSearchParams } from 'next/navigation'
 interface AnalyticsSummary {
   requestCount: number;
   successCount: number;
@@ -22,7 +22,9 @@ interface AnalyticsSummary {
   endTime: string;
 }
 
-export default function RouteAnalyticsSummary({ routeId }: { routeId: string }) {
+export default function RouteAnalyticsSummary() {
+      const searchParams = useSearchParams()
+        const routeId = searchParams.get('routeId')
   const { data, isLoading, error } = useQuery<AnalyticsSummary>({
     queryKey: ["analytics", routeId],
     queryFn: async () => {

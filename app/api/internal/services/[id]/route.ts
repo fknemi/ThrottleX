@@ -1,14 +1,18 @@
-import { NextResponse } from "next/server";
+// app/api/internal/services/[id]/route.ts
+import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 
+
 export async function GET(
-  request: Request,
-  { params }: { params: { id: string } },
+  req: NextRequest,
 ) {
   try {
-    // Await the params object
-    const { id } = await params;
-    
+
+      const id = req.nextUrl.searchParams.get('id')
+if(!id){
+return NextResponse.json({ error: "Service not found" }, { status: 404 });
+
+}
     const service = await prisma.backendService.findUnique({
       where: { id },
       include: {
@@ -37,7 +41,7 @@ export async function GET(
     console.error("Error fetching service:", error);
     return NextResponse.json(
       { error: "Internal server error" },
-      { status: 500 },
+      { status: 500 }
     );
   }
 }
